@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    /* Latar belakang web abu-abu sangat muda agar form dan card putih menonjol */
+    @apply bg-slate-50 text-gray-800 antialiased; 
+  }
+}
+
+@layer components {
+  /* Pembungkus Halaman Utama */
+  .page-container {
+    @apply max-w-[1400px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6;
+  }
+  
+  /* Desain Card dengan Hover Interaktif */
+  .card-base {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-6 transition-all duration-300 hover:shadow-md;
+  }
+  
+  /* Input Form (ERROR SOLVED: Menggunakan emerald bawaan Tailwind) */
+  .input-field {
+    @apply bg-gray-50 border border-gray-200 text-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm;
+  }
+  
+  /* Tombol Utama (ERROR SOLVED: Menggunakan emerald bawaan Tailwind) */
+  .btn-primary {
+    @apply bg-emerald-500 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-emerald-600 hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer border border-emerald-600;
+  }
+  
+  /* Tombol Kedua (ERROR SOLVED: Menggunakan emerald bawaan Tailwind) */
+  .btn-secondary {
+    @apply bg-white border border-emerald-200 text-emerald-600 px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-emerald-50 hover:border-emerald-300 transition-all duration-200 active:scale-95 cursor-pointer shadow-sm;
+  }
+  
+  /* Tombol Garis Tepi Tipis */
+  .btn-outline {
+    @apply bg-transparent border border-gray-300 text-gray-600 px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-gray-100 hover:text-gray-800 transition-all duration-200 active:scale-95 cursor-pointer;
+  }
+
+  /* Efek Blur Transparan di Header */
+  .backdrop-blur-glass {
+    @apply backdrop-blur-md bg-white/90 border-b border-gray-100 shadow-sm;
+  }
+
+  /* Animasi Fade In Kustom untuk Modal */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+}
+
+/* Keyframes kustom Tailwind untuk Fade In Modal */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Menyembunyikan Scrollbar Bawaan (Agar UI Bersih) */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
