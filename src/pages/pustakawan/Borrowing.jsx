@@ -150,7 +150,13 @@ export default function Borrowing() {
                         <td className="py-3 whitespace-nowrap pl-6">
                             <p className="font-bold text-gray-800">{loan.memberName}</p>
                         </td>
-                        <td className="py-3 whitespace-nowrap px-4 text-sm text-gray-700">{loan.books.join(', ')}</td>
+                        <td className="py-3 px-4 text-sm text-gray-700">
+                            <ul className="list-disc list-inside space-y-1">
+                                {loan.books.map((b, i) => (
+                                    <li key={i}>{b}</li>
+                                ))}
+                            </ul>
+                        </td>
                         <td className="py-3 whitespace-nowrap px-4 text-sm font-bold text-gray-600">{loan.dueDate}</td>
                         <td className="py-3 whitespace-nowrap pr-6 text-right"><StatusBadge status={loan.status} /></td>
                      </tr>

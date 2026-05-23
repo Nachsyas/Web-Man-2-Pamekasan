@@ -157,12 +157,12 @@ export default function Returns() {
                     <td className="py-3 whitespace-nowrap px-4">
                       <p className="text-sm font-medium text-gray-800">{trx.memberName}</p>
                     </td>
-                    <td className="py-3 whitespace-nowrap px-4">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="py-3 px-4">
+                      <ul className="list-disc list-inside space-y-1 text-sm text-gray-800">
                         {trx.books.map((b, i) => (
-                          <span key={i} className="bg-gray-100 border border-gray-200 text-gray-600 px-2 py-1 rounded text-[11px]">{b}</span>
+                          <li key={i}>{b}</li>
                         ))}
-                      </div>
+                      </ul>
                     </td>
                     <td className="py-3 whitespace-nowrap px-4 text-center text-sm text-gray-600">{trx.dueDate}</td>
                     <td className="py-3 whitespace-nowrap px-4 text-center whitespace-nowrap">
