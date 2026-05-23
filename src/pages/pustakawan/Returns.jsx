@@ -151,44 +151,42 @@ export default function Returns() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {activeTransactions.map(trx => (
-                  <tr key={trx.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="py-3 whitespace-nowrap pl-6 pr-4 text-sm font-mono text-gray-600">{trx.id}</td>
-                    <td className="py-3 whitespace-nowrap px-4">
-                      <p className="text-sm font-medium text-gray-800">{trx.memberName}</p>
-                    </td>
-                    <td className="py-3 px-4">
-                      <ul className="list-disc list-inside space-y-1 text-sm text-gray-800">
-                        {trx.books.map((b, i) => (
-                          <li key={i}>{b}</li>
-                        ))}
-                      </ul>
-                    </td>
-                    <td className="py-3 whitespace-nowrap px-4 text-center text-sm text-gray-600">{trx.dueDate}</td>
-                    <td className="py-3 whitespace-nowrap px-4 text-center whitespace-nowrap">
-                      <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${trx.status === 'Overdue' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                        {trx.status === 'Overdue' ? 'Terlewat Batas Waktu Peminjaman' : 'Dipinjam'}
-                      </span>
-                    </td>
-                    <td className="py-3 whitespace-nowrap px-4 text-center text-sm font-bold whitespace-nowrap">
-                      {trx.fine > 0 ? <span className="text-red-500">Kalkulasi Denda...</span> : <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="py-3 whitespace-nowrap pr-6 pl-4 text-right">
-                      <button 
-                        onClick={() => { 
-                          setFoundTrx(trx); 
-                          setReturnCondition('Baik');
-                          setReplacementType('Buku');
-                          setReplacementNominal('');
-                          setShowReturnModal(true); 
-                        }} 
-                        className="btn-primary py-1.5 px-4 text-xs inline-flex"
-                      >
-                        Sudah Dikembalikan
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {activeTransactions.flatMap(trx => 
+                  trx.books.map((b, i) => (
+                    <tr key={`${trx.id}-${i}`} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="py-3 whitespace-nowrap pl-6 pr-4 text-sm font-mono text-gray-600">{trx.id}</td>
+                      <td className="py-3 whitespace-nowrap px-4">
+                        <p className="text-sm font-medium text-gray-800">{trx.memberName}</p>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800">
+                        {b}
+                      </td>
+                      <td className="py-3 whitespace-nowrap px-4 text-center text-sm text-gray-600">{trx.dueDate}</td>
+                      <td className="py-3 whitespace-nowrap px-4 text-center whitespace-nowrap">
+                        <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${trx.status === 'Overdue' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                          {trx.status === 'Overdue' ? 'Terlewat Batas Waktu Peminjaman' : 'Dipinjam'}
+                        </span>
+                      </td>
+                      <td className="py-3 whitespace-nowrap px-4 text-center text-sm font-bold whitespace-nowrap">
+                        {trx.fine > 0 ? <span className="text-red-500">Kalkulasi Denda...</span> : <span className="text-gray-400">-</span>}
+                      </td>
+                      <td className="py-3 whitespace-nowrap pr-6 pl-4 text-right">
+                        <button 
+                          onClick={() => { 
+                            setFoundTrx(trx); 
+                            setReturnCondition('Baik');
+                            setReplacementType('Buku');
+                            setReplacementNominal('');
+                            setShowReturnModal(true); 
+                          }} 
+                          className="btn-primary py-1.5 px-4 text-xs inline-flex"
+                        >
+                          Sudah Dikembalikan
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
                 {activeTransactions.length === 0 && (
                   <tr>
                     <td colSpan="7" className="py-8 text-center text-gray-500 text-sm">

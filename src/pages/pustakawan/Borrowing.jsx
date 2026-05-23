@@ -145,22 +145,20 @@ export default function Borrowing() {
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-gray-50 bg-white">
-                   {activeLoans.filter(loan => loan.type === listTab).map(loan => (
-                     <tr key={loan.id} className="hover:bg-emerald-50/30 transition-colors">
-                        <td className="py-3 whitespace-nowrap pl-6">
-                            <p className="font-bold text-gray-800">{loan.memberName}</p>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-gray-700">
-                            <ul className="list-disc list-inside space-y-1">
-                                {loan.books.map((b, i) => (
-                                    <li key={i}>{b}</li>
-                                ))}
-                            </ul>
-                        </td>
-                        <td className="py-3 whitespace-nowrap px-4 text-sm font-bold text-gray-600">{loan.dueDate}</td>
-                        <td className="py-3 whitespace-nowrap pr-6 text-right"><StatusBadge status={loan.status} /></td>
-                     </tr>
-                   ))}
+                   {activeLoans.filter(loan => loan.type === listTab).flatMap(loan => 
+                     loan.books.map((b, i) => (
+                       <tr key={`${loan.id}-${i}`} className="hover:bg-emerald-50/30 transition-colors">
+                          <td className="py-3 whitespace-nowrap pl-6">
+                              <p className="font-bold text-gray-800">{loan.memberName}</p>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-700">
+                              {b}
+                          </td>
+                          <td className="py-3 whitespace-nowrap px-4 text-sm font-bold text-gray-600">{loan.dueDate}</td>
+                          <td className="py-3 whitespace-nowrap pr-6 text-right"><StatusBadge status={loan.status} /></td>
+                       </tr>
+                     ))
+                   )}
                    {activeLoans.filter(loan => loan.type === listTab).length === 0 && (
                      <tr>
                        <td colSpan="4" className="py-8 text-center text-gray-500 text-sm">
