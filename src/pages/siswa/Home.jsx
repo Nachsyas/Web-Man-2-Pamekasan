@@ -39,6 +39,7 @@ export default function SiswaHome() {
           dueDate: l.due_date,
           status: status,
           fine: status === 'overdue' ? Math.max(0, Math.ceil((new Date() - new Date(l.due_date)) / (1000 * 60 * 60 * 24)) * 5000) : 0,
+          type: bookData?.category === 'paket' ? 'Paket' : 'Reguler',
         };
       });
       setLoans(mapped);
@@ -54,6 +55,8 @@ export default function SiswaHome() {
   }, [nisn]);
 
   const activeLoans = loans.filter((b) => b.status === 'active' || b.status === 'overdue');
+  const activeRegularLoans = activeLoans.filter((b) => b.type === 'Reguler');
+  const activePacketLoans = activeLoans.filter((b) => b.type === 'Paket');
   const returnedLoans = loans.filter((b) => b.status === 'returned');
   const latestBorrowings = [...loans].slice(0, 4);
   
@@ -63,6 +66,54 @@ export default function SiswaHome() {
   const totalBorrows = loans.length;
   const activeLoansCount = activeLoans.length;
   const overdueLoansCount = loans.filter((b) => b.status === 'overdue').length;
+
+  const renderLoanCards = (loansList) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {loansList.map((loan) => (
+        <div
+          key={loan.id}
+          className={`bg-white rounded-xl border p-4 flex gap-4 transition-all duration-300 hover:shadow-md ${
+            loan.status === 'overdue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-primary-500'
+          }`}
+        >
+          <img
+            src="https://placehold.co/300x400/ecfdf5/059669?text=Buku+Perpustakaan"
+            alt={loan.bookTitle}
+            className="w-20 h-28 rounded-lg object-cover flex-shrink-0"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <h3 className="font-semibold text-dark-800 text-sm line-clamp-2 leading-snug">
+                {loan.bookTitle}
+              </h3>
+              <StatusBadge status={loan.status} />
+            </div>
+            <p className="text-xs text-dark-500">{loan.author}</p>
+            <div className="mt-3 space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                <i className="ri-calendar-line text-dark-400" />
+                <span className="text-dark-500">Pinjam: {loan.borrowDate}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <i className={`ri-time-line ${loan.status === 'overdue' ? 'text-red-500' : 'text-dark-400'}`} />
+                <span className={loan.status === 'overdue' ? 'text-red-500 font-medium' : 'text-dark-500'}>
+                  Jatuh tempo: {loan.dueDate}
+                </span>
+              </div>
+              {loan.fine > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <i className="ri-money-dollar-circle-line text-red-500" />
+                  <span className="text-red-500 font-medium">
+                    Denda: Rp {loan.fine.toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <SiswaLayout>
@@ -118,60 +169,29 @@ export default function SiswaHome() {
           </div>
         </div>
 
-        {/* Active loans alert */}
-        {activeLoans.length > 0 && (
+        {/* Active regular loans alert */}
+        {activeRegularLoans.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-dark-800">Buku yang Sedang Dipinjam</h2>
+              <h2 className="text-lg font-bold text-dark-800">Buku Reguler yang Sedang Dipinjam</h2>
               <Link to="/siswa/riwayat" className="text-sm text-primary-500 hover:text-primary-600 font-medium">
                 Lihat Semua
               </Link>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {activeLoans.map((loan) => (
-                <div
-                  key={loan.id}
-                  className={`bg-white rounded-xl border p-4 flex gap-4 transition-all duration-300 hover:shadow-md ${
-                    loan.status === 'overdue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-primary-500'
-                  }`}
-                >
-                  <img
-                    src="https://placehold.co/300x400/ecfdf5/059669?text=Buku+Perpustakaan"
-                    alt={loan.bookTitle}
-                    className="w-20 h-28 rounded-lg object-cover flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="font-semibold text-dark-800 text-sm line-clamp-2 leading-snug">
-                        {loan.bookTitle}
-                      </h3>
-                      <StatusBadge status={loan.status} />
-                    </div>
-                    <p className="text-xs text-dark-500">{loan.author}</p>
-                    <div className="mt-3 space-y-1">
-                      <div className="flex items-center gap-2 text-xs">
-                        <i className="ri-calendar-line text-dark-400" />
-                        <span className="text-dark-500">Pinjam: {loan.borrowDate}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <i className={`ri-time-line ${loan.status === 'overdue' ? 'text-red-500' : 'text-dark-400'}`} />
-                        <span className={loan.status === 'overdue' ? 'text-red-500 font-medium' : 'text-dark-500'}>
-                          Jatuh tempo: {loan.dueDate}
-                        </span>
-                      </div>
-                      {loan.fine > 0 && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <i className="ri-money-dollar-circle-line text-red-500" />
-                          <span className="text-red-500 font-medium">
-                            Denda: Rp {loan.fine.toLocaleString()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+            {renderLoanCards(activeRegularLoans)}
+          </div>
+        )}
+
+        {/* Active packet loans alert */}
+        {activePacketLoans.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-dark-800">Buku Paket yang Sedang Dipinjam</h2>
+              <Link to="/siswa/riwayat" className="text-sm text-primary-500 hover:text-primary-600 font-medium">
+                Lihat Semua
+              </Link>
             </div>
+            {renderLoanCards(activePacketLoans)}
           </div>
         )}
 

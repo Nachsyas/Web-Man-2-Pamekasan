@@ -45,6 +45,7 @@ export default function SiswaHistory() {
           returnDate: l.return_date ? l.return_date.split('T')[0] : null,
           status: status,
           fine: daysLate > 0 ? daysLate * 5000 : 0,
+          type: bookData?.category === 'paket' ? 'Paket' : 'Reguler',
         };
       });
       setLoans(mapped);
@@ -143,6 +144,7 @@ export default function SiswaHistory() {
               <thead>
                 <tr className="text-xs text-gray-500 font-medium border-b border-gray-100 bg-gray-50/50">
                   <th className="py-3 pl-5">Buku</th>
+                  <th className="py-3">Jenis</th>
                   <th className="py-3">Kode Transaksi</th>
                   <th className="py-3">Tanggal Pinjam</th>
                   <th className="py-3">Jatuh Tempo</th>
@@ -162,6 +164,13 @@ export default function SiswaHistory() {
                           <p className="text-xs text-gray-400">{b.author}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="py-4 text-sm">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        b.type === 'Paket' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      }`}>
+                        {b.type}
+                      </span>
                     </td>
                     <td className="py-4 text-sm text-gray-600 font-mono">TRX-{b.id}</td>
                     <td className="py-4 text-sm text-gray-600">{b.borrowDate}</td>
