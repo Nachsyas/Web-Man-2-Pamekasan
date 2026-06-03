@@ -1,4 +1,5 @@
-const BASE_URL = 'https://manda-library.vercel.app';
+const BASE_URL = import.meta.env.DEV ? '/api' : 'https://manda-library.vercel.app';
+
 
 async function apiRequest(endpoint, options = {}) {
   const token = localStorage.getItem('access_token');
