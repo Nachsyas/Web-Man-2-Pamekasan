@@ -30,15 +30,16 @@ function StatusBadge({ status }) {
 
 export default function Dashboard() {
   const activeLoans = allBorrowingTransactions.filter(t => t.status === 'Borrowed' || t.status === 'Overdue');
+  const librarianName = localStorage.getItem('pustakawan_name') || 'Ibu Siti Aminah';
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
+    <PustakawanLayout userName={librarianName} userNisn="Pustakawan">
       <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
-            <p className="text-gray-500 mt-1">Selamat datang kembali, Ibu Siti Aminah.</p>
+            <p className="text-gray-500 mt-1">Selamat datang kembali, {librarianName}.</p>
           </div>
           <div className="flex gap-3">
             <Link to="/pustakawan/peminjaman" className="btn-primary">Peminjaman</Link>

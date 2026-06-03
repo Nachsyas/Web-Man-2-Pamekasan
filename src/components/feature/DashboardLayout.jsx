@@ -7,8 +7,25 @@ export default function DashboardLayout({ children, userName }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
+  const currentUserName = localStorage.getItem('pustakawan_name') || userName || 'Ibu Siti Aminah, S.Pd.';
+
+  const getInitials = (name) => {
+    if (!name) return 'SA';
+    const cleanName = name.replace(/^(Ibu|Bapak|Pak|Bu|S\.Pd\.|S\.Kom\.)\s+/i, '').trim();
+    const words = cleanName.split(/\s+/);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return words[0] ? words[0][0].toUpperCase() : 'SA';
+  };
+
+  const userInitials = getInitials(currentUserName);
+
   const handleLogout = () => {
+    localStorage.removeItem('access_token');
     localStorage.removeItem('pustakawan_email');
+    localStorage.removeItem('pustakawan_name');
+    localStorage.removeItem('pustakawan_nip');
     navigate('/');
   };
 
@@ -105,11 +122,11 @@ export default function DashboardLayout({ children, userName }) {
                   onClick={() => setShowDropdown(!showDropdown)}
                 >
                    <div className="text-right hidden sm:block">
-                      <p className="text-sm font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">{userName}</p>
+                      <p className="text-sm font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">{currentUserName}</p>
                       <p className="text-xs text-gray-500">Pustakawan</p>
                    </div>
                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold border border-emerald-200 shadow-sm">
-                      SA
+                      {userInitials}
                    </div>
                    <i className="ri-arrow-down-s-line text-gray-400 group-hover:text-emerald-500 transition-colors" />
                 </div>
