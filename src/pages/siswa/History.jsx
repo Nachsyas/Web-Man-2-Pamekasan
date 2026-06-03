@@ -45,7 +45,9 @@ export default function SiswaHistory() {
           returnDate: l.return_date ? l.return_date.split('T')[0] : null,
           status: status,
           fine: daysLate > 0 ? daysLate * 5000 : 0,
-          type: bookData?.category === 'paket' ? 'Paket' : 'Reguler',
+          type: (bookData?.category === 'paket' || 
+                 (bookData?.subject && bookData.subject.toLowerCase().includes('pelajaran')) || 
+                 (bookData?.title && bookData.title.toLowerCase().includes('kelas'))) ? 'Paket' : 'Reguler',
         };
       });
       setLoans(mapped);

@@ -39,7 +39,9 @@ export default function SiswaHome() {
           dueDate: l.due_date,
           status: status,
           fine: status === 'overdue' ? Math.max(0, Math.ceil((new Date() - new Date(l.due_date)) / (1000 * 60 * 60 * 24)) * 5000) : 0,
-          type: bookData?.category === 'paket' ? 'Paket' : 'Reguler',
+          type: (bookData?.category === 'paket' || 
+                 (bookData?.subject && bookData.subject.toLowerCase().includes('pelajaran')) || 
+                 (bookData?.title && bookData.title.toLowerCase().includes('kelas'))) ? 'Paket' : 'Reguler',
         };
       });
       setLoans(mapped);

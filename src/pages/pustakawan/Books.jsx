@@ -66,21 +66,29 @@ export default function Books() {
       if (typeFilter === 'Buku Reguler') apiCategory = 'reguler';
 
       const data = await api.getBooks(search, apiCategory);
-      const mapped = data.map(b => ({
-        id: b.id,
-        title: b.title,
-        isbn: b.isbn,
-        author: b.author,
-        publisher: b.publisher,
-        year: b.publication_year,
-        classification_number: b.classification_number,
-        rack: b.rack_location,
-        stock: b.stok_sekarang ?? b.stok_awal ?? 0,
-        totalStock: b.stok_awal ?? 0,
-        type: b.category === 'paket' ? 'Buku Paket' : 'Buku Reguler',
-        category: b.subject || '',
-        condition: (b.stok_sekarang ?? b.stok_awal) > 0 ? 'Available' : 'Borrowed'
-      }));
+      const mapped = data.map(b => {
+        const stockVal = b.stok_sekarang !== undefined ? b.stok_sekarang : (b.stock !== undefined ? b.stock : 0);
+        const totalStockVal = b.stok_awal !== undefined ? b.stok_awal : (b.stock !== undefined ? b.stock : 0);
+        const isPaket = b.category === 'paket' || 
+                        (b.subject && b.subject.toLowerCase().includes('pelajaran')) || 
+                        (b.title && b.title.toLowerCase().includes('kelas'));
+        
+        return {
+          id: b.id,
+          title: b.title,
+          isbn: b.isbn || '-',
+          author: b.author,
+          publisher: b.publisher || '-',
+          year: b.publication_year || b.year || '-',
+          classification_number: b.classification_number || '-',
+          rack: b.rack_location || b.rack || '-',
+          stock: stockVal,
+          totalStock: totalStockVal,
+          type: isPaket ? 'Buku Paket' : 'Buku Reguler',
+          category: b.subject || '',
+          condition: stockVal > 0 ? 'Available' : 'Borrowed'
+        };
+      });
       setBooks(mapped);
     } catch (err) {
       setToast(err.message || 'Gagal memuat data buku');
