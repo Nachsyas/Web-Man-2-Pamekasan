@@ -1,7 +1,8 @@
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
-import { bookRacks, booksMock } from '../../mocks/books';
+import { bookRacks } from '../../mocks/books';
+import { api } from '../../services/api';
 
 const conditions = ['Available', 'Borrowed', 'Damaged', 'Lost'];
 const bookTypes = ['Buku Reguler', 'Buku Paket'];
@@ -35,7 +36,8 @@ function ConditionBadge({ condition }) {
 }
 
 export default function Books() {
-  const [books, setBooks] = useState(booksMock.map(b => ({ ...b, type: 'Buku Reguler' })));
+  const [books, setBooks] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -55,6 +57,42 @@ export default function Books() {
   const [editingBook, setEditingBook] = useState(null);
   const [form, setForm] = useState({});
   const [toast, setToast] = useState('');
+
+  const fetchBooks = async () => {
+    setIsLoading(true);
+    try {
+      let apiCategory = '';
+      if (typeFilter === 'Buku Paket') apiCategory = 'paket';
+      if (typeFilter === 'Buku Reguler') apiCategory = 'reguler';
+
+      const data = await api.getBooks(search, apiCategory);
+      const mapped = data.map(b => ({
+        id: b.id,
+        title: b.title,
+        isbn: b.isbn,
+        author: b.author,
+        publisher: b.publisher,
+        year: b.publication_year,
+        classification_number: b.classification_number,
+        rack: b.rack_location,
+        stock: b.stok_sekarang ?? b.stok_awal ?? 0,
+        totalStock: b.stok_awal ?? 0,
+        type: b.category === 'paket' ? 'Buku Paket' : 'Buku Reguler',
+        category: b.subject || '',
+        condition: (b.stok_sekarang ?? b.stok_awal) > 0 ? 'Available' : 'Borrowed'
+      }));
+      setBooks(mapped);
+    } catch (err) {
+      setToast(err.message || 'Gagal memuat data buku');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBooks();
+  }, [search, typeFilter]);
 
   // Efek Kamera Scan Barcode
   useEffect(() => {
@@ -88,42 +126,62 @@ export default function Books() {
 
   const filteredBooks = useMemo(() => {
     return books.filter(b => {
-      const matchSearch = !search || b.title.toLowerCase().includes(search.toLowerCase()) || b.isbn.includes(search);
       const matchCategory = !categoryFilter || b.category === categoryFilter;
-      const matchType = !typeFilter || b.type === typeFilter;
-      return matchSearch && matchCategory && matchType;
+      return matchCategory;
     });
-  }, [books, search, categoryFilter, typeFilter]);
+  }, [books, categoryFilter]);
 
-  const saveBook = () => {
+  const saveBook = async () => {
     if (!form.title || !form.isbn) {
       setToast('Judul dan ISBN wajib diisi!');
       setTimeout(() => setToast(''), 3000);
       return;
     }
-    if (editingBook) {
-      setBooks(books.map(b => b.id === editingBook.id ? { ...b, ...form } : b));
-      setToast('Buku berhasil diperbarui');
-    } else {
-      setBooks([{ 
-        ...form, 
-        id: `BK-${Date.now()}`, 
-        stock: parseInt(form.stock) || 0,
-        totalStock: parseInt(form.stock) || 0,
-        type: form.type || 'Buku Reguler',
-        condition: 'Available'
-      }, ...books]);
-      setToast('Buku baru berhasil ditambahkan');
+
+    const payload = {
+      classification_number: form.classification_number || '000',
+      author: form.author || 'Pustakawan',
+      title: form.title,
+      edition: form.edition || 'Cetakan 1',
+      publication_place: form.publication_place || 'Pamekasan',
+      publisher: form.publisher || 'MAN 2 Pamekasan',
+      publication_year: parseInt(form.year) || new Date().getFullYear(),
+      total_pages: parseInt(form.total_pages) || 100,
+      subject: form.category || 'Umum',
+      stock: parseInt(form.stock) || 0,
+      category: form.type === 'Buku Paket' ? 'paket' : 'reguler',
+      rack_location: form.rack || 'Rak Umum',
+      isbn: form.isbn,
+    };
+
+    try {
+      if (editingBook) {
+        await api.updateBook(editingBook.id, payload);
+        setToast('Buku berhasil diperbarui');
+      } else {
+        await api.createBook(payload);
+        setToast('Buku baru berhasil ditambahkan');
+      }
+      fetchBooks();
+      setShowFormModal(false);
+    } catch (err) {
+      setToast(err.message || 'Gagal menyimpan data buku');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
     }
-    setShowFormModal(false);
-    setTimeout(() => setToast(''), 3000);
   };
 
-  const confirmDelete = () => {
-    setBooks(books.filter(b => b.id !== editingBook.id));
-    setShowDelete(false);
-    setToast('Buku berhasil dihapus');
-    setTimeout(() => setToast(''), 3000);
+  const confirmDelete = async () => {
+    try {
+      await api.deleteBook(editingBook.id);
+      setToast('Buku berhasil dihapus');
+      fetchBooks();
+      setShowDelete(false);
+    } catch (err) {
+      setToast(err.message || 'Gagal menghapus buku');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
   // Logika Simulasi Import Excel

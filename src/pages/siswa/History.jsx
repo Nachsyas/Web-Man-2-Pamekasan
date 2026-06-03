@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SiswaLayout from '../../components/feature/SiswaLayout';
-import { studentBorrowings } from '../../mocks/student';
+import { api } from '../../services/api';
 
 function StatusBadge({ status }) {
   if (status === 'active') return <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs">Dipinjam</span>;
@@ -13,8 +13,53 @@ function StatusBadge({ status }) {
 export default function SiswaHistory() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [loans, setLoans] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const nisn = localStorage.getItem('siswa_nisn') || '';
 
-  const filtered = studentBorrowings.filter((b) => {
+  const fetchHistory = async () => {
+    if (!nisn) return;
+    setIsLoading(true);
+    try {
+      const res = await api.getLoansByNisn(nisn);
+      const mapped = res.data.map(l => {
+        const bookData = Array.isArray(l.books) ? l.books[0] : l.books;
+        
+        let status = 'returned';
+        if (!l.return_date) {
+          const dueDate = new Date(l.due_date);
+          dueDate.setHours(23, 59, 59, 999);
+          status = new Date() > dueDate ? 'overdue' : 'active';
+        }
+
+        const daysLate = !l.return_date && status === 'overdue'
+          ? Math.ceil((new Date() - new Date(l.due_date)) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        return {
+          id: l.id,
+          bookTitle: bookData?.title || 'Buku Perpustakaan',
+          author: bookData?.author || '-',
+          borrowDate: l.borrow_date,
+          dueDate: l.due_date,
+          returnDate: l.return_date ? l.return_date.split('T')[0] : null,
+          status: status,
+          fine: daysLate > 0 ? daysLate * 5000 : 0,
+        };
+      });
+      setLoans(mapped);
+    } catch (err) {
+      console.error('Gagal memuat riwayat:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, [nisn]);
+
+  const filtered = loans.filter((b) => {
     const matchesFilter = filter === 'all' || b.status === filter;
     const matchesSearch =
       b.bookTitle.toLowerCase().includes(search.toLowerCase()) ||
@@ -23,10 +68,10 @@ export default function SiswaHistory() {
   });
 
   const filterTabs = [
-    { key: 'all', label: 'Semua', count: studentBorrowings.length },
-    { key: 'active', label: 'Dipinjam', count: studentBorrowings.filter((b) => b.status === 'active').length },
-    { key: 'overdue', label: 'Terlambat', count: studentBorrowings.filter((b) => b.status === 'overdue').length },
-    { key: 'returned', label: 'Dikembalikan', count: studentBorrowings.filter((b) => b.status === 'returned').length },
+    { key: 'all', label: 'Semua', count: loans.length },
+    { key: 'active', label: 'Dipinjam', count: loans.filter((b) => b.status === 'active').length },
+    { key: 'overdue', label: 'Terlambat', count: loans.filter((b) => b.status === 'overdue').length },
+    { key: 'returned', label: 'Dikembalikan', count: loans.filter((b) => b.status === 'returned').length },
   ];
 
   return (
@@ -66,7 +111,7 @@ export default function SiswaHistory() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari judul atau penulis buku..."
-              className="w-full border rounded-lg pl-12 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full border rounded-lg pl-12 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             />
           </div>
           <div className="flex items-center gap-2 overflow-x-auto">
@@ -118,7 +163,7 @@ export default function SiswaHistory() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 text-sm text-gray-600 font-mono">{b.transactionCode}</td>
+                    <td className="py-4 text-sm text-gray-600 font-mono">TRX-{b.id}</td>
                     <td className="py-4 text-sm text-gray-600">{b.borrowDate}</td>
                     <td className="py-4 text-sm text-gray-600">{b.dueDate}</td>
                     <td className="py-4 text-sm text-gray-600">{b.returnDate || '-'}</td>

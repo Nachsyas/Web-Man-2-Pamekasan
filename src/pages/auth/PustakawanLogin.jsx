@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../../services/api';
 
 const pustakawanIllustration = 'https://readdy.ai/api/search-image?query=Modern%20library%20management%20workspace%20illustration%20with%20librarian%20organizing%20books%20on%20digital%20shelves%2C%20warm%20lighting%2C%20clean%20minimalist%20isometric%20design%2C%20emerald%20green%20and%20blue%20accent%20colors%2C%20professional%20educational%20atmosphere%2C%20transparent%20soft%20background&width=500&height=400&seq=120&orientation=squarish';
 
@@ -11,7 +12,7 @@ export default function PustakawanLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -25,11 +26,18 @@ export default function PustakawanLogin() {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      localStorage.setItem('pustakawan_email', email.trim());
+    try {
+      const response = await api.loginPustakawan(email.trim(), password);
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('pustakawan_email', response.user.email);
+      localStorage.setItem('pustakawan_name', response.user.name);
+      localStorage.setItem('pustakawan_nip', response.user.nip);
       navigate('/pustakawan/dashboard');
-    }, 1200);
+    } catch (err) {
+      setError(err.message || 'Gagal login. Periksa kembali email dan password Anda.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
-import { allBorrowingTransactions } from '../../mocks/system';
 import { booksMock } from '../../mocks/books';
+import { api } from '../../services/api';
 
 export default function Returns() {
   const [searchCode, setSearchCode] = useState('');
   const [foundTrx, setFoundTrx] = useState(null);
-  const [transactions, setTransactions] = useState(allBorrowingTransactions);
+  const [transactions, setTransactions] = useState([]);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [toast, setToast] = useState('');
   
@@ -18,14 +18,46 @@ export default function Returns() {
   const [replacementType, setReplacementType] = useState('Buku');
   const [replacementNominal, setReplacementNominal] = useState('');
 
+  const fetchLoans = async () => {
+    try {
+      const res = await api.getLoans();
+      const mapped = res.data.map(l => {
+        const dueDate = new Date(l.due_date);
+        dueDate.setHours(23, 59, 59, 999);
+        const today = new Date();
+        const daysLate = Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
+        const fine = daysLate > 0 ? daysLate * 5000 : 0;
+
+        return {
+          id: l.id,
+          memberName: l.borrower_name,
+          nisn: l.nisn,
+          books: [l.book_title],
+          borrowDate: l.borrow_date,
+          dueDate: l.due_date,
+          status: l.status === 'overdue' ? 'Overdue' : 'Borrowed',
+          type: l.category === 'paket' ? 'Paket' : 'Reguler',
+          fine: fine,
+        };
+      });
+      setTransactions(mapped);
+    } catch (err) {
+      console.error('Gagal memuat data peminjaman:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLoans();
+  }, []);
+
   const activeTransactions = useMemo(() => {
     return transactions.filter(t => (t.status === 'Borrowed' || t.status === 'Overdue') && t.type === listTab);
   }, [transactions, listTab]);
 
   const stats = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
     return {
-      today: transactions.filter(t => t.returnDate === today).length,
+      today: transactions.filter(t => t.returnDate === todayStr).length,
       overdue: transactions.filter(t => t.status === 'Overdue').length,
       totalFine: transactions.reduce((sum, t) => sum + t.fine, 0),
       pendingReturn: transactions.filter(t => t.status === 'Borrowed' || t.status === 'Overdue').length,
@@ -33,7 +65,10 @@ export default function Returns() {
   }, [transactions]);
 
   const searchTransaction = () => {
-    const found = transactions.find(t => t.id.toLowerCase() === searchCode.toLowerCase() && (t.status === 'Borrowed' || t.status === 'Overdue'));
+    const found = transactions.find(t => 
+      t.id.toString() === searchCode.trim() && 
+      (t.status === 'Borrowed' || t.status === 'Overdue')
+    );
     if (found) {
       setFoundTrx(found);
       setReturnCondition('Baik');
@@ -46,16 +81,19 @@ export default function Returns() {
     }
   };
 
-  const processReturn = () => {
+  const processReturn = async () => {
     if (!foundTrx) return;
-    setTransactions(prev => prev.map(t => {
-      if (t.id !== foundTrx.id) return t;
-      return { ...t, status: 'Returned', returnDate: new Date().toISOString().split('T')[0] };
-    }));
-    setShowReturnModal(false);
-    setSearchCode('');
-    setToast(`Pengembalian ${foundTrx.id} berhasil diproses.`);
-    setTimeout(() => setToast(''), 3000);
+    try {
+      await api.returnBook(foundTrx.id, returnCondition);
+      setToast(`Pengembalian transaksi #${foundTrx.id} berhasil diproses.`);
+      fetchLoans();
+      setShowReturnModal(false);
+      setSearchCode('');
+    } catch (err) {
+      setToast(err.message || 'Gagal memproses pengembalian.');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
   return (
