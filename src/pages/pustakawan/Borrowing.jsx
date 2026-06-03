@@ -37,14 +37,15 @@ export default function Borrowing() {
     setIsLoading(true);
     try {
       const res = await api.getLoans();
-      const mapped = res.data.map(l => ({
+      const rawData = Array.isArray(res) ? res : (res.data || []);
+      const mapped = rawData.map(l => ({
         id: l.id,
-        memberName: l.borrower_name,
-        books: [l.book_title],
-        borrowDate: l.borrow_date,
-        dueDate: l.due_date,
-        status: l.status === 'overdue' ? 'Overdue' : 'Borrowed',
-        type: l.category === 'paket' ? 'Paket' : 'Reguler',
+        memberName: l.memberName || l.borrower_name || (l.students && l.students.name) || 'Siswa',
+        books: l.books || [l.book_title || (l.books_relation && l.books_relation.title) || 'Buku'],
+        borrowDate: l.borrowDate || l.borrow_date,
+        dueDate: l.dueDate || l.due_date,
+        status: l.status === 'overdue' ? 'Overdue' : (l.status === 'dipinjam' ? 'Borrowed' : l.status),
+        type: l.type || (l.category === 'paket' ? 'Paket' : 'Reguler'),
       }));
       setTransactions(mapped);
     } catch (err) {

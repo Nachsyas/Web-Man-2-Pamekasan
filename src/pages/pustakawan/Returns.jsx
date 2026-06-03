@@ -21,8 +21,9 @@ export default function Returns() {
   const fetchLoans = async () => {
     try {
       const res = await api.getLoans();
-      const mapped = res.data.map(l => {
-        const dueDate = new Date(l.due_date);
+      const rawData = Array.isArray(res) ? res : (res.data || []);
+      const mapped = rawData.map(l => {
+        const dueDate = new Date(l.dueDate || l.due_date);
         dueDate.setHours(23, 59, 59, 999);
         const today = new Date();
         const daysLate = Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
@@ -30,13 +31,13 @@ export default function Returns() {
 
         return {
           id: l.id,
-          memberName: l.borrower_name,
+          memberName: l.memberName || l.borrower_name || (l.students && l.students.name) || 'Siswa',
           nisn: l.nisn,
-          books: [l.book_title],
-          borrowDate: l.borrow_date,
-          dueDate: l.due_date,
-          status: l.status === 'overdue' ? 'Overdue' : 'Borrowed',
-          type: l.category === 'paket' ? 'Paket' : 'Reguler',
+          books: l.books || [l.book_title || (l.books_relation && l.books_relation.title) || 'Buku'],
+          borrowDate: l.borrowDate || l.borrow_date,
+          dueDate: l.dueDate || l.due_date,
+          status: l.status === 'overdue' ? 'Overdue' : (l.status === 'dipinjam' ? 'Borrowed' : l.status),
+          type: l.type || (l.category === 'paket' ? 'Paket' : 'Reguler'),
           fine: fine,
         };
       });
