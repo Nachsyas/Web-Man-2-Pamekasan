@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../../services/api';
 
 const studentIllustration = 'https://readdy.ai/api/search-image?query=Young%20Indonesian%20student%20happily%20reading%20a%20book%20in%20a%20modern%20library%2C%20clean%20illustration%20style%2C%20emerald%20green%20and%20white%20color%20scheme%2C%20educational%20atmosphere%2C%20minimalist%20modern%20digital%20art%20with%20transparent%20soft%20background%2C%20friendly%20and%20welcoming%20mood&width=500&height=400&seq=110&orientation=squarish';
 
@@ -10,7 +11,7 @@ export default function SiswaAccess() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -28,12 +29,23 @@ export default function SiswaAccess() {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      localStorage.setItem('siswa_nisn', nisn.trim());
-      localStorage.setItem('siswa_nama', nama.trim());
+    try {
+      // 1. Log attendance / register student
+      await api.checkIn(nisn.trim(), nama.trim());
+
+      // 2. Perform login to obtain token
+      const loginResponse = await api.loginSiswa(nisn.trim());
+
+      localStorage.setItem('access_token', loginResponse.access_token);
+      localStorage.setItem('siswa_nisn', loginResponse.student.nisn);
+      localStorage.setItem('siswa_nama', loginResponse.student.nama);
+
       navigate('/siswa');
-    }, 1000);
+    } catch (err) {
+      setError(err.message || 'Gagal melakukan verifikasi akses siswa.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -1,19 +1,56 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import SiswaLayout from '../../components/feature/SiswaLayout';
-import { availableBooksForStudents, studentCategories } from '../../mocks/student';
+import { api } from '../../services/api';
+
+const regulerCategories = [
+  'Semua', 'Filsafat', 'Pendidikan', 'Sains & Matematika', 'Teknologi & Komputer', 
+  'Seni & Desain', 'Bahasa & Sastra', 'Fiksi / Novel', 'Agama & Spiritual', 
+  'Sejarah & Budaya', 'Sosial & Politik', 'Biografi / Otobiografi', 
+  'Referensi / Ensiklopedia', 'Karya Umum'
+];
 
 export default function SiswaCatalog() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Semua');
   const [bookType, setBookType] = useState('Reguler'); // 'Reguler' | 'Paket'
+  const [books, setBooks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredBooks = availableBooksForStudents.filter((book) => {
-    const matchesSearch =
-      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.author.toLowerCase().includes(searchQuery.toLowerCase());
+  const fetchBooks = async () => {
+    setIsLoading(true);
+    try {
+      const apiCategory = bookType === 'Paket' ? 'paket' : 'reguler';
+      const data = await api.getBooks(searchQuery, apiCategory);
+      
+      const mapped = data.map(b => ({
+        id: b.id,
+        title: b.title,
+        isbn: b.isbn,
+        author: b.author,
+        publisher: b.publisher,
+        year: b.publication_year,
+        classification_number: b.classification_number,
+        rack: b.rack_location,
+        stock: b.stok_sekarang ?? b.stok_awal ?? 0,
+        totalStock: b.stok_awal ?? 0,
+        category: b.subject || 'Umum',
+        description: `Buku ${b.subject || 'Umum'} terbitan ${b.publisher || '-'} tahun ${b.publication_year || '-'}.`
+      }));
+      setBooks(mapped);
+    } catch (err) {
+      console.error('Gagal memuat katalog:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBooks();
+  }, [searchQuery, bookType]);
+
+  const filteredBooks = books.filter((book) => {
     const matchesCategory = activeCategory === 'Semua' || book.category === activeCategory;
-    const matchesType = bookType === 'Paket' ? book.category === 'Pendidikan' : book.category !== 'Pendidikan';
-    return matchesSearch && matchesCategory && matchesType;
+    return matchesCategory;
   });
 
   return (
@@ -57,7 +94,7 @@ export default function SiswaCatalog() {
           </div>
           {bookType === 'Reguler' && (
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 lg:pb-0">
-              {studentCategories.filter(c => c !== 'Pendidikan').slice(0, 6).map((cat) => (
+              {regulerCategories.slice(0, 6).map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}

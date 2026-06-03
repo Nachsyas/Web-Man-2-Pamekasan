@@ -1,0 +1,187 @@
+### ===========================================
+### PAGE KELOLA BUKU
+### ===========================================
+### Get All Books
+GET https://manda-library.vercel.app/books
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkwNTk2LCJleHAiOjE3ODA0NzY5OTZ9.aH9a0r44WDd4EE5utqZmfeSTEkwC665_o-c2M21oSb0
+### Get All Reguler Books
+GET https://manda-library.vercel.app/books?category=reguler
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkwNTk2LCJleHAiOjE3ODA0NzY5OTZ9.aH9a0r44WDd4EE5utqZmfeSTEkwC665_o-c2M21oSb0
+### Get All Paket Books
+GET https://manda-library.vercel.app/books?category=paket
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkwNTk2LCJleHAiOjE3ODA0NzY5OTZ9.aH9a0r44WDd4EE5utqZmfeSTEkwC665_o-c2M21oSb0
+### Search Book
+GET https://manda-library.vercel.app/books?search=a
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkwNTk2LCJleHAiOjE3ODA0NzY5OTZ9.aH9a0r44WDd4EE5utqZmfeSTEkwC665_o-c2M21oSb0
+### Search Paket Book
+GET https://manda-library.vercel.app/books?category=paket&search=inggris
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkwNTk2LCJleHAiOjE3ODA0NzY5OTZ9.aH9a0r44WDd4EE5utqZmfeSTEkwC665_o-c2M21oSb0
+### Add Buku
+POST https://manda-library.vercel.app/books/
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkwNTk2LCJleHAiOjE3ODA0NzY5OTZ9.aH9a0r44WDd4EE5utqZmfeSTEkwC665_o-c2M21oSb0
+Content-Type: application/json
+
+{
+  "classification_number": "500",
+  "author": "Andrea Hirata",
+  "title": "Laskar Pelangi",
+  "edition": "Cetakan ke-2",
+  "publication_place": "Jakarta",
+  "publisher": "Bentang Pustaka",
+  "publication_year": 2005,
+  "total_pages": 529,
+  "subject": "Novel Indonesia",
+  "stock": 10,
+  "category": "regular",
+  "rack_location": "RAK-A1",
+  "isbn": "9789793062794"
+}
+### Delete Buku
+DELETE https://manda-library.vercel.app/books/5
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzA2NzcyLCJleHAiOjE3ODAzOTMxNzJ9.UdNk8CEfZCx8LFzMp5BezzgPuunH3Tvdp9mc4-FjDxc
+### Update Buku
+PATCH https://manda-library.vercel.app/books/4
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzA2NzcyLCJleHAiOjE3ODAzOTMxNzJ9.UdNk8CEfZCx8LFzMp5BezzgPuunH3Tvdp9mc4-FjDxc
+
+{
+  "classification_number": "500",
+  "author": "Budi Santoso",
+  "title": "Ilmu Pengetahuan Alam untuk SMP",
+  "edition": "Edisi Revisi",
+  "publication_place": "Jakarta",
+  "publisher": "Erlangga",
+  "publication_year": 2022,
+  "total_pages": 240,
+  "subject": "Ilmu Pengetahuan Alam",
+  "stock": 30,
+  "category": "reguler",
+  "rack_location": "Rak A1",
+  "isbn": "9786021234567"
+}
+### Ambil Label Buku Sesuai Total Stok
+GET https://manda-library.vercel.app/books/5/labels
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzA2NzcyLCJleHAiOjE3ODAzOTMxNzJ9.UdNk8CEfZCx8LFzMp5BezzgPuunH3Tvdp9mc4-FjDxc
+### END API KELOLA BUKU
+### ===========================================
+
+
+### ===========================================
+### PEMINJAMAN PAGE
+### ===========================================
+### Get Semua Peminjaman
+GET https://manda-library.vercel.app/loans
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Get Peminjaman Buku Reguler
+GET https://manda-library.vercel.app/loans/reguler
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Get Peminjaman Buku Paket
+GET https://manda-library.vercel.app/loans/paket
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Get Peminjaman Reguler Status Dipinjam
+GET https://manda-library.vercel.app/loans/reguler?status=dipinjam
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Search Siswa Untuk Suggestion By Name
+GET https://manda-library.vercel.app/loans/students/search?keyword=fahri
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Search Siswa Untuk Suggestion By NISN
+GET https://manda-library.vercel.app/loans/students/search?keyword=772
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Get buku reguler untuk modal
+GET https://manda-library.vercel.app/loans/reguler/books?search=bedebah
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Simpan peminjaman reguler
+POST https://manda-library.vercel.app/loans/reguler
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+Content-Type: application/json
+
+{
+  "nisn": "0105961972",
+  "bookId": 5,
+  "dueDate": "2026-06-10"
+}
+### Get buku paket untuk modal
+GET https://manda-library.vercel.app/loans/paket/books?search=ind
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+### Simpan Peminjaman Buku Paket Banyak Siswa
+POST https://manda-library.vercel.app/loans/paket
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuaXAiOiIxMjMiLCJlbWFpbCI6ImFyaGFtQGdtYWlsLmNvbSIsInJvbGUiOiJwdXN0YWthd2FuIiwiaWF0IjoxNzgwMzkzNTkxLCJleHAiOjE3ODA0Nzk5OTF9.vSCaa4OZUj82wc63PgjbJsolARokI31rAu3haK8xbH8
+Content-Type: application/json
+
+{
+  "bookId": 7,
+  "dueDate": "2026-06-10",
+  "nisn": [
+    "0105961972",
+    "0104398772"
+  ]
+}
+### END API PEMINJAMAN
+### ===========================================
+
+
+### Search Book
+GET https://manda-library.vercel.app/books?search="liye"
+
+### Get Name By NISN Check In
+GET https://manda-library.vercel.app/auth/getname?nisn=0104398772
+
+### Get Book Detail By ID
+GET https://manda-library.vercel.app/books/4
+
+
+
+
+### ===========================================
+### AUTHENTICATION
+### ===========================================
+### Register
+POST https://manda-library.vercel.app/auth/register
+Content-Type: application/json
+
+{
+  "nip":"123",
+  "name":"Cristiano Arham",
+  "email":"arham@gmail.com",
+  "password":"password",
+  "role":"Pustakawan"
+}
+### Login Pustakawan
+POST https://manda-library.vercel.app/auth/pustakawan/login
+Content-Type: application/json
+
+{
+  "email":"arham@gmail.com",
+  "password":"password"
+}
+### Login Siswa
+POST https://manda-library.vercel.app/auth/siswa/login
+Content-Type: application/json
+
+{
+  "nisn":"0104398772"
+}
+### END OF AUTHENTICATION
+### ===========================================
+
+
+
+
+
+
+### ===========================================
+### Check In
+### ===========================================
+POST https://manda-library.vercel.app/auth/checkin
+Content-Type: application/json
+
+{
+  "nisn":"0104398772",
+  "name":"ACH. FAHRI RASULI"
+}
+### END OF CHECK IN
+### ===========================================
+
+
+
+

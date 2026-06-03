@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SiswaLayout from '../../components/feature/SiswaLayout';
-import { clearanceRequests, studentBorrowings, studentProfile } from '../../mocks/student';
+import { api } from '../../services/api';
 
 function StatusBadge({ status }) {
   if (status === 'active') return <span className="badge-info text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs">Dipinjam</span>;
@@ -10,16 +11,58 @@ function StatusBadge({ status }) {
 }
 
 export default function SiswaHome() {
-  const activeLoans = studentBorrowings.filter((b) => b.status === 'active' || b.status === 'overdue');
-  const returnedLoans = studentBorrowings.filter((b) => b.status === 'returned');
-  const latestBorrowings = [...studentBorrowings].slice(0, 4);
+  const [loans, setLoans] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const nisn = localStorage.getItem('siswa_nisn') || '';
+  const nama = localStorage.getItem('siswa_nama') || 'Siswa';
+
+  const fetchStudentDashboard = async () => {
+    if (!nisn) return;
+    setIsLoading(true);
+    try {
+      const res = await api.getLoansByNisn(nisn);
+      const mapped = res.data.map(l => {
+        const bookData = Array.isArray(l.books) ? l.books[0] : l.books;
+        
+        let status = 'returned';
+        if (!l.return_date) {
+          const dueDate = new Date(l.due_date);
+          dueDate.setHours(23, 59, 59, 999);
+          status = new Date() > dueDate ? 'overdue' : 'active';
+        }
+
+        return {
+          id: l.id,
+          bookTitle: bookData?.title || 'Buku Perpustakaan',
+          author: bookData?.author || '-',
+          borrowDate: l.borrow_date,
+          dueDate: l.due_date,
+          status: status,
+          fine: status === 'overdue' ? Math.max(0, Math.ceil((new Date() - new Date(l.due_date)) / (1000 * 60 * 60 * 24)) * 5000) : 0,
+        };
+      });
+      setLoans(mapped);
+    } catch (err) {
+      console.error('Gagal mengambil data dashboard siswa:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudentDashboard();
+  }, [nisn]);
+
+  const activeLoans = loans.filter((b) => b.status === 'active' || b.status === 'overdue');
+  const returnedLoans = loans.filter((b) => b.status === 'returned');
+  const latestBorrowings = [...loans].slice(0, 4);
   
-  const hasClearanceApproved = clearanceRequests.some(
-    (c) => c.nisn === studentProfile.nisn && c.status === 'approved'
-  );
-  const hasPendingClearance = clearanceRequests.some(
-    (c) => c.nisn === studentProfile.nisn && c.status === 'pending'
-  );
+  const hasClearanceApproved = false;
+  const hasPendingClearance = false;
+
+  const totalBorrows = loans.length;
+  const activeLoansCount = activeLoans.length;
+  const overdueLoansCount = loans.filter((b) => b.status === 'overdue').length;
 
   return (
     <SiswaLayout>
@@ -30,10 +73,10 @@ export default function SiswaHome() {
             <div>
               <p className="text-sm text-primary-600 font-medium mb-1">Selamat Datang</p>
               <h1 className="text-2xl lg:text-3xl font-bold text-dark-800">
-                {studentProfile.name}
+                {nama}
               </h1>
               <p className="text-dark-500 text-sm mt-1">
-                {studentProfile.className} &middot; NISN: {studentProfile.nisn}
+                Siswa &middot; NISN: {nisn}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -57,15 +100,15 @@ export default function SiswaHome() {
           {/* Quick stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6 pt-6 border-t border-dark-100">
             <div className="text-center lg:text-left">
-              <p className="text-2xl font-bold text-dark-800">{studentProfile.totalBorrows}</p>
+              <p className="text-2xl font-bold text-dark-800">{totalBorrows}</p>
               <p className="text-xs text-dark-400">Total Peminjaman</p>
             </div>
             <div className="text-center lg:text-left">
-              <p className="text-2xl font-bold text-primary-600">{studentProfile.activeLoans}</p>
+              <p className="text-2xl font-bold text-primary-600">{activeLoansCount}</p>
               <p className="text-xs text-dark-400">Buku Dipinjam</p>
             </div>
             <div className="text-center lg:text-left">
-              <p className="text-2xl font-bold text-red-500">{studentProfile.overdueLoans}</p>
+              <p className="text-2xl font-bold text-red-500">{overdueLoansCount}</p>
               <p className="text-xs text-dark-400">Terlambat</p>
             </div>
             <div className="text-center lg:text-left">

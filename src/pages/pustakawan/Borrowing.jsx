@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
-import { booksMock } from '../../mocks/books';
-import { allBorrowingTransactions, allMembers } from '../../mocks/system';
+import { api } from '../../services/api';
 
 function StatusBadge({ status }) {
   const styles = {
@@ -17,10 +16,8 @@ function StatusBadge({ status }) {
 }
 
 export default function Borrowing() {
-  // Remove pending transactions from initial state simulation
-  const [transactions, setTransactions] = useState(
-    allBorrowingTransactions.filter(t => t.status !== 'Pending')
-  );
+  const [transactions, setTransactions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [borrowType, setBorrowType] = useState('Reguler'); // 'Reguler' or 'Paket'
   const [toast, setToast] = useState('');
@@ -31,8 +28,69 @@ export default function Borrowing() {
   const [selectedMember, setSelectedMember] = useState(null);
   const [searchBuku, setSearchBuku] = useState('');
   const [selectedBook, setSelectedBook] = useState(null);
+  const [filteredMembers, setFilteredMembers] = useState([]);
+  const [booksForModal, setBooksForModal] = useState([]);
 
   const activeLoans = useMemo(() => transactions.filter(t => t.status === 'Borrowed' || t.status === 'Overdue'), [transactions]);
+
+  const fetchLoans = async () => {
+    setIsLoading(true);
+    try {
+      const res = await api.getLoans();
+      const mapped = res.data.map(l => ({
+        id: l.id,
+        memberName: l.borrower_name,
+        books: [l.book_title],
+        borrowDate: l.borrow_date,
+        dueDate: l.due_date,
+        status: l.status === 'overdue' ? 'Overdue' : 'Borrowed',
+        type: l.category === 'paket' ? 'Paket' : 'Reguler',
+      }));
+      setTransactions(mapped);
+    } catch (err) {
+      console.error('Gagal mengambil data peminjaman:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLoans();
+  }, []);
+
+  // Handle student search debouncing
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      if (searchSiswa.trim().length > 1 && !selectedMember) {
+        try {
+          const res = await api.searchStudentsForLoan(searchSiswa);
+          setFilteredMembers(res.data);
+        } catch (err) {
+          console.error(err);
+        }
+      } else {
+        setFilteredMembers([]);
+      }
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchSiswa, selectedMember]);
+
+  // Handle book search inside modal
+  const fetchBooksForModal = async () => {
+    try {
+      const apiCategory = borrowType === 'Paket' ? 'paket' : 'reguler';
+      const res = await api.getBooksForLoanModal(apiCategory, searchBuku);
+      setBooksForModal(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (showModal) {
+      fetchBooksForModal();
+    }
+  }, [showModal, borrowType, searchBuku]);
 
   // Handle auto-fill Nama Siswa
   const handleSelectMember = (member) => {
@@ -40,46 +98,33 @@ export default function Borrowing() {
     setSearchSiswa(member.nisn);
   };
 
-  const filteredMembers = useMemo(() => {
-    if (!searchSiswa) return [];
-    return allMembers.filter(m => m.nisn.includes(searchSiswa) || m.name.toLowerCase().includes(searchSiswa.toLowerCase()));
-  }, [searchSiswa]);
-
-  // Simulate Paket vs Reguler logic based on Category
-  const filteredBooks = useMemo(() => {
-    return booksMock.filter(b => {
-      const matchType = borrowType === 'Paket' ? b.category === 'Pendidikan' : b.category !== 'Pendidikan';
-      const matchSearch = !searchBuku || b.title.toLowerCase().includes(searchBuku.toLowerCase());
-      return matchType && matchSearch;
-    });
-  }, [borrowType, searchBuku]);
-
-  const handleManualSubmit = () => {
+  const handleManualSubmit = async () => {
     if (!selectedMember || !selectedBook) {
         setToast('Pilih siswa dan buku terlebih dahulu!');
         setTimeout(() => setToast(''), 3000);
         return;
     }
 
-    const newTrx = {
-        id: `TRX-MAN-${Date.now()}`,
-        memberName: selectedMember.name,
-        books: [selectedBook.title],
-        borrowDate: new Date().toISOString().split('T')[0],
-        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        status: 'Borrowed',
-        fine: 0,
-        approvedBy: 'Ibu Siti Aminah'
-    };
+    const dueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    setTransactions([newTrx, ...transactions]);
-    setShowModal(false);
-    setSelectedMember(null);
-    setSearchSiswa('');
-    setSelectedBook(null);
-    setSearchBuku('');
-    setToast('Tambah peminjaman berhasil!');
-    setTimeout(() => setToast(''), 3000);
+    try {
+      if (borrowType === 'Reguler') {
+        await api.createRegularLoan(selectedMember.nisn, selectedBook.id, dueDate);
+      } else {
+        await api.createPacketLoan(selectedBook.id, dueDate, [selectedMember.nisn]);
+      }
+      setToast('Tambah peminjaman berhasil!');
+      fetchLoans();
+      setShowModal(false);
+      setSelectedMember(null);
+      setSearchSiswa('');
+      setSelectedBook(null);
+      setSearchBuku('');
+    } catch (err) {
+      setToast(err.message || 'Gagal menyimpan transaksi peminjaman.');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
   const openModal = (type) => {
@@ -213,13 +258,13 @@ export default function Borrowing() {
                                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
                                         {filteredMembers.map(m => (
                                             <button 
-                                                key={m.id} 
+                                                key={m.nisn} 
                                                 onClick={() => handleSelectMember(m)}
                                                 className="w-full text-left px-4 py-2 hover:bg-emerald-50 hover:text-emerald-700 text-sm transition-colors border-b border-gray-50 last:border-0"
                                             >
                                                 <div className="font-semibold text-emerald-700">{m.nisn}</div>
                                                 <div className="text-sm text-gray-800">{m.name}</div>
-                                                <div className="text-xs text-gray-500">Kelas: {m.className}</div>
+                                                <div className="text-xs text-gray-500">Kelas: {m.class || '-'}</div>
                                             </button>
                                         ))}
                                     </div>
@@ -255,7 +300,7 @@ export default function Borrowing() {
                             </div>
                             
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4 max-h-64 overflow-y-auto pr-2 scrollbar-hide">
-                                {filteredBooks.length > 0 ? filteredBooks.map(b => (
+                                {booksForModal.length > 0 ? booksForModal.map(b => (
                                     <div 
                                         key={b.id} 
                                         onClick={() => setSelectedBook(b)}
@@ -264,7 +309,7 @@ export default function Borrowing() {
                                         `}
                                     >
                                         <div className="w-16 h-20 bg-gray-200 rounded overflow-hidden">
-                                            <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover" />
+                                            <img src={b.coverUrl || 'https://placehold.co/150x200?text=Buku'} alt={b.title} className="w-full h-full object-cover" />
                                         </div>
                                         <div>
                                             <p className="text-xs font-bold text-gray-800 line-clamp-2">{b.title}</p>
