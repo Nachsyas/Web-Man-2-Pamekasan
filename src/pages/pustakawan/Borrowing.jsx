@@ -44,7 +44,7 @@ export default function Borrowing() {
         books: l.books || [l.book_title || (l.books_relation && l.books_relation.title) || 'Buku'],
         borrowDate: l.borrowDate || l.borrow_date,
         dueDate: l.dueDate || l.due_date,
-        status: l.status === 'overdue' ? 'Overdue' : (l.status === 'dipinjam' ? 'Borrowed' : l.status),
+        status: (l.status === 'overdue' || l.status === 'terlambat') ? 'Overdue' : (l.status === 'dipinjam' || l.status === 'borrowed') ? 'Borrowed' : l.status,
         type: l.type || (l.category === 'paket' ? 'Paket' : 'Reguler'),
       }));
       setTransactions(mapped);

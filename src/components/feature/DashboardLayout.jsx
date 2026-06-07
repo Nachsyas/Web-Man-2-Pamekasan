@@ -36,7 +36,6 @@ export default function DashboardLayout({ children, userName }) {
     { path: '/pustakawan/pengembalian', icon: 'ri-arrow-go-back-line', label: 'Pengembalian' },
     { path: '/pustakawan/anggota', icon: 'ri-user-line', label: 'Siswa' },
     { path: '/pustakawan/laporan', icon: 'ri-file-chart-line', label: 'Laporan' },
-    { path: '/pustakawan/pengaturan', icon: 'ri-settings-3-line', label: 'Pengaturan' },
   ];
 
   return (
@@ -103,15 +102,6 @@ export default function DashboardLayout({ children, userName }) {
              <i className="ri-menu-line text-xl" />
            </button>
 
-           {/* Pencarian Global */}
-           <div className="relative w-96 group hidden lg:block ml-4 md:ml-0">
-              <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-emerald-500 transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Cari buku, siswa, atau transaksi..." 
-                className="w-full bg-gray-50 border border-gray-200 text-gray-800 rounded-full pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 transition-all hover:border-emerald-300" 
-              />
-           </div>
 
            {/* Aksi Kanan (Ikon Lonceng Dihapus) */}
            <div className="flex items-center ml-auto">

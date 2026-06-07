@@ -58,6 +58,29 @@ export default function Books() {
   const [form, setForm] = useState({});
   const [toast, setToast] = useState('');
 
+  const [labelsData, setLabelsData] = useState(null);
+  const [loadingLabels, setLoadingLabels] = useState(false);
+  const [labelQuantity, setLabelQuantity] = useState(10);
+
+  const handleOpenLabelModal = async (book) => {
+    setEditingBook(book);
+    setShowLabelModal(true);
+    setLoadingLabels(true);
+    setLabelsData(null);
+    const initialQty = Math.min(10, book.stock || 10);
+    setLabelQuantity(initialQty);
+    try {
+      const res = await api.getBookLabels(book.id, book.stock || 100);
+      if (res) {
+        setLabelsData(res.data || res);
+      }
+    } catch (err) {
+      console.error('Gagal mengambil label buku:', err);
+    } finally {
+      setLoadingLabels(false);
+    }
+  };
+
   const fetchBooks = async () => {
     setIsLoading(true);
     try {
@@ -76,12 +99,12 @@ export default function Books() {
         return {
           id: b.id,
           title: b.title,
-          isbn: b.isbn || '-',
+          isbn: b.isbn || '',
           author: b.author,
-          publisher: b.publisher || '-',
-          year: b.publication_year || b.year || '-',
-          classification_number: b.classification_number || '-',
-          rack: b.rack_location || b.rack || '-',
+          publisher: b.publisher || '',
+          year: b.publication_year || b.year || '',
+          classification_number: b.classification_number || '',
+          rack: b.rack_location || b.rack || '',
           stock: stockVal,
           totalStock: totalStockVal,
           type: isPaket ? 'Buku Paket' : 'Buku Reguler',
@@ -170,6 +193,32 @@ export default function Books() {
         await api.createBook(payload);
         setToast('Buku baru berhasil ditambahkan');
       }
+
+      // Save suggestions to local state and localStorage
+      if (form.category) {
+        if (form.type === 'Buku Paket') {
+          if (!paketCategories.includes(form.category) && !customCategoriesPaket.includes(form.category)) {
+            const updated = [...customCategoriesPaket, form.category];
+            setCustomCategoriesPaket(updated);
+            localStorage.setItem('custom_categories_paket', JSON.stringify(updated));
+          }
+        } else {
+          if (!regulerCategories.includes(form.category) && !customCategoriesReguler.includes(form.category)) {
+            const updated = [...customCategoriesReguler, form.category];
+            setCustomCategoriesReguler(updated);
+            localStorage.setItem('custom_categories_reguler', JSON.stringify(updated));
+          }
+        }
+      }
+
+      if (form.rack) {
+        if (!bookRacks.includes(form.rack) && !customRacks.includes(form.rack)) {
+          const updated = [...customRacks, form.rack];
+          setCustomRacks(updated);
+          localStorage.setItem('custom_racks', JSON.stringify(updated));
+        }
+      }
+
       fetchBooks();
       setShowFormModal(false);
     } catch (err) {
@@ -213,7 +262,55 @@ export default function Books() {
     }, 2000);
   };
 
-  const activeCategoriesInForm = form.type === 'Buku Paket' ? paketCategories : regulerCategories;
+  const [customCategoriesReguler, setCustomCategoriesReguler] = useState(() => {
+    try {
+      const saved = localStorage.getItem('custom_categories_reguler');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [customCategoriesPaket, setCustomCategoriesPaket] = useState(() => {
+    try {
+      const saved = localStorage.getItem('custom_categories_paket');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [customRacks, setCustomRacks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('custom_racks');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const combinedRegulerCategories = useMemo(() => {
+    const fromBooks = books
+      .filter(b => b.type === 'Buku Reguler')
+      .map(b => b.category)
+      .filter(Boolean);
+    return Array.from(new Set([...regulerCategories, ...fromBooks, ...customCategoriesReguler]));
+  }, [books, customCategoriesReguler]);
+
+  const combinedPaketCategories = useMemo(() => {
+    const fromBooks = books
+      .filter(b => b.type === 'Buku Paket')
+      .map(b => b.category)
+      .filter(Boolean);
+    return Array.from(new Set([...paketCategories, ...fromBooks, ...customCategoriesPaket]));
+  }, [books, customCategoriesPaket]);
+
+  const combinedRacks = useMemo(() => {
+    const fromBooks = books.map(b => b.rack).filter(Boolean);
+    return Array.from(new Set([...bookRacks, ...fromBooks, ...customRacks]));
+  }, [books, customRacks]);
+
+  const activeCategoriesInForm = form.type === 'Buku Paket' ? combinedPaketCategories : combinedRegulerCategories;
 
   return (
     <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
@@ -291,10 +388,10 @@ export default function Books() {
                                 <td className="py-3 whitespace-nowrap px-4"><ConditionBadge condition={book.condition} /></td>
                                 <td className="py-3 whitespace-nowrap pr-6 text-right">
                                     <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => { setEditingBook(book); setShowLabelModal(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-purple-600 hover:bg-purple-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Cetak Label">
+                                        <button onClick={() => handleOpenLabelModal(book)} className="w-9 h-9 rounded-xl text-gray-400 hover:text-purple-600 hover:bg-purple-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Cetak Label">
                                             <i className="ri-printer-line text-lg" />
                                         </button>
-                                        <button onClick={() => { setEditingBook(book); setForm(book); setShowFormModal(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Edit Data">
+                                        <button onClick={() => { setEditingBook(book); setForm({ ...book, stock: book.totalStock }); setShowFormModal(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Edit Data">
                                             <i className="ri-edit-line text-lg" />
                                         </button>
                                         <button onClick={() => { setEditingBook(book); setShowDelete(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Hapus Buku">
@@ -451,10 +548,16 @@ export default function Books() {
                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                                  Kategori {form.type === 'Buku Paket' ? 'Mata Pelajaran' : 'Sastra & Referensi'}
                                </label>
-                               <select value={form.category || ''} onChange={e => setForm({...form, category: e.target.value})} className="w-full bg-gray-50 border border-gray-200 text-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm cursor-pointer">
-                                    <option value="">Pilih Kategori Kustom...</option>
-                                    {activeCategoriesInForm.map(c => <option key={c} value={c}>{c}</option>)}
-                               </select>
+                               <input
+                                 list="category-suggestions"
+                                 value={form.category || ''}
+                                 onChange={e => setForm({...form, category: e.target.value})}
+                                 className="w-full bg-gray-50 border border-gray-200 text-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm"
+                                 placeholder="Ketik atau pilih kategori..."
+                               />
+                               <datalist id="category-suggestions">
+                                 {activeCategoriesInForm.map(c => <option key={c} value={c} />)}
+                               </datalist>
                             </div>
 
                             <div>
@@ -468,10 +571,16 @@ export default function Books() {
                             <div className="md:col-span-2 p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100 grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
                                    <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Lokasi Tempat Rak</label>
-                                   <select value={form.rack || ''} onChange={e => setForm({...form, rack: e.target.value})} className="w-full bg-white border border-gray-200 text-gray-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm cursor-pointer shadow-sm">
-                                        <option value="">Pilih Posisi Rak...</option>
-                                        {bookRacks.map(r => <option key={r} value={r}>{r}</option>)}
-                                   </select>
+                                   <input
+                                     list="rack-suggestions"
+                                     value={form.rack || ''}
+                                     onChange={e => setForm({...form, rack: e.target.value})}
+                                     className="w-full bg-white border border-gray-200 text-gray-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm shadow-sm"
+                                     placeholder="Ketik atau pilih lokasi..."
+                                   />
+                                   <datalist id="rack-suggestions">
+                                     {combinedRacks.map(r => <option key={r} value={r} />)}
+                                   </datalist>
                                 </div>
                                 <div>
                                    <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Jumlah Unit Ekslempar</label>
@@ -508,28 +617,143 @@ export default function Books() {
 
         {/* MODAL 3: PREVIEW PRINT LABEL */}
         {showLabelModal && editingBook && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
-                <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl animate-fade-in">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-gray-800">Preview Label Identitas</h3>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm print-modal-overlay">
+                {/* CSS @media print inject to only print the official labels */}
+                <style dangerouslySetInnerHTML={{ __html: `
+                  @media print {
+                    /* Hide sidebar, topbar, modal headers, controls and buttons */
+                    aside, header, button, .no-print, .print-exclude, .print-modal-overlay::before {
+                      display: none !important;
+                    }
+                    
+                    /* Reset body and layout container styling for printing */
+                    body, html, main, #root, div {
+                      background: transparent !important;
+                      box-shadow: none !important;
+                      border: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                    }
+                  
+                    /* Make overlay static and clean layout for print */
+                    .print-modal-overlay {
+                      position: static !important;
+                      display: block !important;
+                      background: transparent !important;
+                      backdrop-filter: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      width: 100% !important;
+                    }
+                  
+                    /* Remove modal borders and styling */
+                    .print-modal-overlay > div {
+                      background: transparent !important;
+                      border: none !important;
+                      box-shadow: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      width: 100% !important;
+                      max-width: 100% !important;
+                    }
+                  
+                    /* Lay out stickers in a 3-column print grid */
+                    .print-label-container {
+                      max-height: none !important;
+                      overflow: visible !important;
+                      background: transparent !important;
+                      border: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      display: grid !important;
+                      grid-template-columns: repeat(3, 1fr) !important;
+                      gap: 15px !important;
+                    }
+                  
+                    /* Format print label items as clean stickers with border cut guide */
+                    .print-label-item {
+                      page-break-inside: avoid !important;
+                      break-inside: avoid !important;
+                      border: 1px dashed #444 !important;
+                      background: white !important;
+                      box-shadow: none !important;
+                      margin: 0 auto !important;
+                      width: 100% !important;
+                      box-sizing: border-box !important;
+                      padding: 10px !important;
+                    }
+                  }
+                `}} />
+
+                <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-fade-in">
+                    <div className="flex justify-between items-center mb-6 print-exclude">
+                        <div>
+                            <h3 className="font-bold text-gray-800 text-lg">Preview Label Identitas</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">Dihasilkan otomatis oleh sistem backend</p>
+                        </div>
                         <button onClick={() => setShowLabelModal(false)} className="text-gray-400 hover:text-gray-600"><i className="ri-close-line text-xl" /></button>
                     </div>
                     
-                    <div className="border border-gray-300 p-1 bg-white mx-auto w-[240px] rounded drop-shadow-sm">
-                        <div className="border border-gray-800 p-3 text-center">
-                            <h4 className="font-bold text-[10px] uppercase tracking-wider mb-1">Perpus MAN 2 Pamekasan</h4>
-                            <div className="w-full h-px bg-gray-800 mb-3" />
-                            <i className="ri-barcode-line text-5xl text-gray-800 block mb-1" />
-                            <p className="font-mono text-xs font-bold tracking-widest mb-3">{editingBook.isbn || '000-000-000'}</p>
-                            <p className="text-xs font-bold leading-tight line-clamp-2 uppercase">{editingBook.title}</p>
-                            <div className="mt-3 flex justify-between items-end border-t border-gray-300 pt-2 text-[10px] font-bold">
-                                <span>{editingBook.rack || 'RAK-00'}</span>
-                                <span className="bg-gray-800 text-white px-1.5 py-0.5 rounded-sm">{editingBook.type === 'Buku Paket' ? 'PKT' : 'RGL'}</span>
-                            </div>
-                        </div>
+                    <div className="mb-4 print-exclude">
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">Jumlah Stiker yang Dicetak</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max={editingBook.stock || 100}
+                        value={labelQuantity} 
+                        onChange={(e) => setLabelQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="input-field w-full text-sm py-1.5"
+                      />
                     </div>
                     
-                    <button onClick={() => { window.print(); setShowLabelModal(false); }} className="w-full mt-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
+                    {loadingLabels ? (
+                      <div className="h-[250px] flex flex-col items-center justify-center gap-2 text-gray-400 print-exclude">
+                        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-xs">Menghasilkan stiker label...</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-[350px] overflow-y-auto space-y-4 pr-2 bg-gray-50 p-4 rounded-xl border border-gray-100 print-label-container">
+                        {labelsData?.labels ? (
+                          labelsData.labels.slice(0, labelQuantity).map((lbl, idx) => (
+                            <div key={idx} className="border border-gray-300 p-1 bg-white mx-auto w-[240px] rounded drop-shadow-sm print-label-item">
+                                <div className="border border-gray-800 p-3 text-center">
+                                    <h4 className="font-bold text-[9px] uppercase tracking-wider mb-1">{lbl.institution_name}</h4>
+                                    <div className="w-full h-px bg-gray-800 mb-2" />
+                                    <p className="font-bold text-xs leading-tight font-serif mb-1">{lbl.call_number}</p>
+                                    <p className="text-[10px] font-bold leading-tight line-clamp-1 uppercase mb-2">{lbl.title}</p>
+                                    <i className="ri-barcode-line text-3xl text-gray-800 block mb-0.5" />
+                                    <p className="font-mono text-[9px] font-bold tracking-widest">{lbl.isbn || '000-000-000'}</p>
+                                    <div className="mt-2 flex justify-between items-end border-t border-gray-300 pt-1.5 text-[9px] font-bold">
+                                        <span>{lbl.rack_location || 'RAK-00'}</span>
+                                        <span className="bg-gray-800 text-white px-1.5 py-0.5 rounded-sm uppercase">{lbl.category === 'paket' ? 'PKT' : 'RGL'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                          ))
+                        ) : (
+                          Array.from({ length: labelQuantity }).map((_, idx) => (
+                            <div key={idx} className="border border-gray-300 p-1 bg-white mx-auto w-[240px] rounded drop-shadow-sm print-label-item">
+                                <div className="border border-gray-800 p-3 text-center">
+                                    <h4 className="font-bold text-[10px] uppercase tracking-wider mb-1">Perpus MAN 2 Pamekasan</h4>
+                                    <div className="w-full h-px bg-gray-800 mb-3" />
+                                    <p className="font-bold text-xs leading-tight font-serif mb-1">
+                                      {editingBook.classification_number || '000'} {editingBook.author ? editingBook.author.substring(0, 3).toUpperCase() : 'XXX'} {editingBook.title ? editingBook.title.substring(0, 1).toLowerCase() : 'x'} C.{idx + 1}
+                                    </p>
+                                    <p className="text-xs font-bold leading-tight line-clamp-2 uppercase">{editingBook.title}</p>
+                                    <i className="ri-barcode-line text-5xl text-gray-800 block mb-1" />
+                                    <p className="font-mono text-xs font-bold tracking-widest mb-3">{editingBook.isbn || '000-000-000'}</p>
+                                    <div className="mt-3 flex justify-between items-end border-t border-gray-300 pt-2 text-[10px] font-bold">
+                                        <span>{editingBook.rack || 'RAK-00'}</span>
+                                        <span className="bg-gray-800 text-white px-1.5 py-0.5 rounded-sm">{editingBook.type === 'Buku Paket' ? 'PKT' : 'RGL'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                    
+                    <button onClick={() => { window.print(); setShowLabelModal(false); }} className="w-full mt-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors print-exclude">
                         <i className="ri-printer-fill" /> Cetak Label Stiker
                     </button>
                 </div>

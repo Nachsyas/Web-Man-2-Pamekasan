@@ -15,6 +15,19 @@ async function apiRequest(endpoint, options = {}) {
   });
 
   if (!response.ok) {
+    if (response.status === 401 && !endpoint.includes('/auth/pustakawan/login') && !endpoint.includes('/auth/siswa/login')) {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('student');
+      
+      const currentPath = window.location.pathname;
+      if (currentPath.startsWith('/siswa')) {
+        window.location.href = '/siswa/access';
+      } else {
+        window.location.href = '/pustakawan/login';
+      }
+    }
+
     let errorMessage = 'Terjadi kesalahan sistem';
     try {
       const errorData = await response.json();
@@ -44,10 +57,10 @@ export const api = {
       body: JSON.stringify({ email, password }) 
     }),
     
-  loginSiswa: (nisn) => 
+  loginSiswa: (nisn, name) => 
     apiRequest('/auth/siswa/login', { 
       method: 'POST', 
-      body: JSON.stringify({ nisn }) 
+      body: JSON.stringify({ nisn, name }) 
     }),
     
   checkIn: (nisn, name) => 
@@ -57,6 +70,7 @@ export const api = {
     }),
     
   getNameByNisn: (nisn) => apiRequest(`/auth/getname?nisn=${nisn}`),
+  searchSchoolStudents: (keyword) => apiRequest(`/auth/students/search?keyword=${encodeURIComponent(keyword)}`),
 
   // --- KELOLA BUKU ---
   getBooks: (search = '', category = '') => {
@@ -93,6 +107,14 @@ export const api = {
     const queryStr = category ? `?category=${category}` : '';
     return apiRequest(`/loans${queryStr}`);
   },
+
+  getReturns: (category = '', search = '') => {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (search) params.append('search', search);
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest(`/loans/returns${queryStr}`);
+  },
   
   getLoansByStatus: (category, status) => {
     return apiRequest(`/loans/${category}?status=${status}`);
@@ -125,5 +147,70 @@ export const api = {
     apiRequest(`/loans/return/${loanId}`, { 
       method: 'POST', 
       body: JSON.stringify({ loanId: parseInt(loanId), condition: condition.toLowerCase() }) 
+    }),
+
+  replaceBook: (loanId) => 
+    apiRequest(`/loans/replacement/${loanId}`, { 
+      method: 'POST' 
+    }),
+
+  // --- MEMBERS / STUDENTS MANAGEMENT ---
+  getStudents: (search = '') => 
+    apiRequest('/students' + (search ? `?search=${search}` : '')),
+
+  createStudent: (studentData) => 
+    apiRequest('/students', { 
+      method: 'POST', 
+      body: JSON.stringify(studentData) 
+    }),
+
+  deleteStudent: (nisn) => 
+    apiRequest(`/students/${nisn}`, { 
+      method: 'DELETE' 
+    }),
+
+  // --- REPORTS ---
+  getReports: (type, startDate, endDate) => 
+    apiRequest(`/reports?type=${type}&startDate=${startDate}&endDate=${endDate}`),
+
+  // --- DASHBOARDS ---
+  getDashboard: () => apiRequest('/dashboard'),
+
+  getStudentDashboard: () => apiRequest('/student-dashboard/me'),
+
+  // --- STUDENT COLLECTIONS ---
+  getStudentCatalog: (category = '', search = '', subject = '') => {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (search) params.append('search', search);
+    if (subject) params.append('subject', subject);
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest(`/student-catalog${queryStr}`);
+  },
+
+  getStudentCatalogDetail: (id) => 
+    apiRequest(`/student-catalog/${id}`),
+
+  getStudentHistory: (search = '', status = '') => {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (status) params.append('status', status);
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest(`/student-dashboard/me/history${queryStr}`);
+  },
+
+  // --- ACCOUNT PROFILE ---
+  getAccountMe: () => apiRequest('/account/me'),
+
+  updateAccountMe: (data) => 
+    apiRequest('/account/me', { 
+      method: 'PATCH', 
+      body: JSON.stringify(data) 
+    }),
+
+  updatePasswordMe: (data) => 
+    apiRequest('/account/me/password', { 
+      method: 'PATCH', 
+      body: JSON.stringify(data) 
     }),
 };

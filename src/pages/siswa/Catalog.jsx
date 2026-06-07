@@ -12,6 +12,7 @@ const regulerCategories = [
 export default function SiswaCatalog() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Semua');
+  const [categories, setCategories] = useState(['Semua']);
   const [bookType, setBookType] = useState('Reguler'); // 'Reguler' | 'Paket'
   const [books, setBooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,14 +21,18 @@ export default function SiswaCatalog() {
     setIsLoading(true);
     try {
       const apiCategory = bookType === 'Paket' ? 'paket' : 'reguler';
-      const data = await api.getBooks(searchQuery, apiCategory);
+      const subjectParam = activeCategory === 'Semua' ? '' : activeCategory;
+      const res = await api.getStudentCatalog(apiCategory, searchQuery, subjectParam);
       
-      const mapped = data.map(b => {
-        const stockVal = b.stok_sekarang !== undefined ? b.stok_sekarang : (b.stock !== undefined ? b.stock : 0);
-        const totalStockVal = b.stok_awal !== undefined ? b.stok_awal : (b.stock !== undefined ? b.stock : 0);
-        const isPaket = b.category === 'paket' || 
-                        (b.subject && b.subject.toLowerCase().includes('pelajaran')) || 
-                        (b.title && b.title.toLowerCase().includes('kelas'));
+      if (res && res.filters) {
+        setCategories(res.filters.map(f => f.label));
+      }
+      
+      const dataList = res.data || [];
+      
+      const mapped = dataList.map(b => {
+        const stockVal = b.stock !== undefined ? b.stock : 0;
+        const totalStockVal = b.stok_awal !== undefined ? b.stok_awal : 0;
         
         return {
           id: b.id,
@@ -35,14 +40,14 @@ export default function SiswaCatalog() {
           isbn: b.isbn || '-',
           author: b.author,
           publisher: b.publisher || '-',
-          year: b.publication_year || b.year || '-',
+          year: b.publication_year || '-',
           classification_number: b.classification_number || '-',
-          rack: b.rack_location || b.rack || '-',
+          rack: b.rack_location || '-',
           stock: stockVal,
           totalStock: totalStockVal,
           category: b.subject || 'Umum',
-          type: isPaket ? 'Buku Paket' : 'Buku Reguler',
-          description: `Buku ${b.subject || 'Umum'} terbitan ${b.publisher || '-'} tahun ${b.publication_year || b.year || '-'}.`
+          type: b.category === 'paket' ? 'Buku Paket' : 'Buku Reguler',
+          description: `Buku ${b.subject || 'Umum'} terbitan ${b.publisher || '-'} tahun ${b.publication_year || '-'}.`
         };
       });
       setBooks(mapped);
@@ -55,12 +60,9 @@ export default function SiswaCatalog() {
 
   useEffect(() => {
     fetchBooks();
-  }, [searchQuery, bookType]);
+  }, [searchQuery, bookType, activeCategory]);
 
-  const filteredBooks = books.filter((book) => {
-    const matchesCategory = activeCategory === 'Semua' || book.category === activeCategory;
-    return matchesCategory;
-  });
+  const filteredBooks = books;
 
   return (
     <SiswaLayout>
@@ -101,9 +103,9 @@ export default function SiswaCatalog() {
               className="w-full border border-gray-200 rounded-xl pl-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
             />
           </div>
-          {bookType === 'Reguler' && (
+          {categories.length > 1 && (
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 lg:pb-0">
-              {regulerCategories.slice(0, 6).map((cat) => (
+              {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}

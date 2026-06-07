@@ -1,91 +1,135 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
-import { allMembers, visitorLogs, allBorrowingTransactions } from '../../mocks/system';
-
-
-function StatusBadge({ activeLoans }) {
-  const isReturned = activeLoans === 0;
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${isReturned ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-      {isReturned ? <i className="ri-check-line mr-1" /> : <i className="ri-error-warning-line mr-1" />}
-      {isReturned ? 'Sudah Dikembalikan' : 'Belum Mengembalikan'}
-    </span>
-  );
-}
+import { api } from '../../services/api';
 
 export default function Members() {
-  const [members, setMembers] = useState(allMembers);
+  const [members, setMembers] = useState([]);
+  const [summary, setSummary] = useState({
+    total_students: 0,
+    today_visits: 0,
+    new_this_month: 0,
+    not_returned: 0
+  });
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [loading, setLoading] = useState(false);
   
   const [showAdd, setShowAdd] = useState(false);
-  const [newMember, setNewMember] = useState({ nisn: '', name: '', email: '' });
+  const [newMember, setNewMember] = useState({ nisn: '', name: '', class: '' });
   const [toast, setToast] = useState('');
   
   const [searchSiswa, setSearchSiswa] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [schoolStudents, setSchoolStudents] = useState([]);
+  
+  const [loansLog, setLoansLog] = useState([]);
+  const [topVisitors, setTopVisitors] = useState([]);
 
-  const mockSchoolStudents = useMemo(() => [
-    { nisn: '0011223344', name: 'Zahra Aulia', className: 'X-IPA-1' },
-    { nisn: '0022334455', name: 'Rafi Ramadhan', className: 'X-IPS-2' },
-    { nisn: '0033445566', name: 'Nisa Sabyan', className: 'XI-MIPA-1' },
-    { nisn: '0044556677', name: 'Arif Hidayat', className: 'XII-IPS-1' }
-  ], []);
+  // Fetch library member students
+  const fetchMembers = async () => {
+    setLoading(true);
+    try {
+      const res = await api.getStudents(search);
+      if (res) {
+        setMembers(res.data || []);
+        if (res.summary) {
+          setSummary(res.summary);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setToast('Gagal memuat data siswa');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filteredSchoolStudents = useMemo(() => {
-    if (!searchSiswa) return [];
-    return mockSchoolStudents.filter(s => s.nisn.includes(searchSiswa));
-  }, [searchSiswa, mockSchoolStudents]);
+  // Fetch loans for the log
+  const fetchLoans = async () => {
+    try {
+      const res = await api.getLoans();
+      if (res && res.data) {
+        setLoansLog(res.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Fetch visitor logs / statistics
+  const fetchVisitorLogs = async () => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const lastMonth = new Date();
+      lastMonth.setDate(lastMonth.getDate() - 30);
+      const lastMonthStr = lastMonth.toISOString().split('T')[0];
+      
+      const res = await api.getReports('pengunjung', lastMonthStr, todayStr);
+      if (res && res.top_visitors) {
+        setTopVisitors(res.top_visitors);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchMembers();
+  }, [search]);
+
+  useEffect(() => {
+    fetchLoans();
+    fetchVisitorLogs();
+  }, []);
+
+  // Search school database for student to register
+  useEffect(() => {
+    const delayDebounce = setTimeout(async () => {
+      if (searchSiswa.trim().length >= 2) {
+        try {
+          const res = await api.searchSchoolStudents(searchSiswa);
+          if (res && res.data) {
+            setSchoolStudents(res.data);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      } else {
+        setSchoolStudents([]);
+      }
+    }, 300);
+    return () => clearTimeout(delayDebounce);
+  }, [searchSiswa]);
 
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
     setSearchSiswa(student.nisn);
-    setNewMember({ ...newMember, nisn: student.nisn, name: student.name });
+    setNewMember({ nisn: student.nisn, name: student.name, class: student.class || '' });
   };
 
-  const visitors = visitorLogs;
-
-  const filtered = useMemo(() => {
-    return members.filter(m => {
-      const q = search.toLowerCase();
-      const matchSearch = !q || m.name.toLowerCase().includes(q) || m.nisn.includes(q);
-      const mStatus = m.activeLoans === 0 ? 'Returned' : 'NotReturned';
-      const matchStatus = !statusFilter || mStatus === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [members, search, statusFilter]);
-
-  const stats = useMemo(() => {
-    const today = '2026-05-13';
-    return {
-      total: members.length,
-      activeToday: visitors.filter(v => v.date === today).length,
-      newThisMonth: members.filter(m => m.joinedAt.startsWith('2026-05')).length,
-      overdue: members.filter(m => m.activeLoans > 0).length,
-    };
-  }, [members, visitors]);
-
-  const addMember = () => {
+  const addMember = async () => {
     if (!newMember.nisn || !newMember.name) {
       setToast('NISN dan Nama wajib diisi');
       setTimeout(() => setToast(''), 3000);
       return;
     }
-    const member = {
-      id: Math.random().toString(36).slice(2),
-      ...newMember,
-      status: 'Active',
-      totalBorrows: 0,
-      activeLoans: 0,
-      joinedAt: new Date().toISOString().split('T')[0],
-    };
-    setMembers(prev => [member, ...prev]);
-    setShowAdd(false);
-    setNewMember({ nisn: '', name: '', email: '' });
-    setSearchSiswa('');
-    setSelectedStudent(null);
-    setToast('Siswa berhasil ditambahkan');
-    setTimeout(() => setToast(''), 3000);
+    try {
+      await api.createStudent({
+        nisn: newMember.nisn,
+        name: newMember.name,
+        class: newMember.class || '-'
+      });
+      setToast('Siswa berhasil ditambahkan');
+      setTimeout(() => setToast(''), 3000);
+      setShowAdd(false);
+      setNewMember({ nisn: '', name: '', class: '' });
+      setSearchSiswa('');
+      setSelectedStudent(null);
+      fetchMembers();
+    } catch (err) {
+      setToast(err.message || 'Gagal menambahkan siswa');
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
   return (
@@ -106,10 +150,10 @@ export default function Members() {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total Siswa', value: stats.total, icon: 'ri-team-line', color: 'text-green-600 bg-green-50' },
-            { label: 'Kunjungan Hari Ini', value: stats.activeToday, icon: 'ri-user-follow-line', color: 'text-emerald-600 bg-emerald-50' },
-            { label: 'Baru Bulan Ini', value: stats.newThisMonth, icon: 'ri-user-received-line', color: 'text-blue-600 bg-blue-50' },
-            { label: 'Belum Mengembalikan', value: stats.overdue, icon: 'ri-book-read-line', color: 'text-red-600 bg-red-50' },
+            { label: 'Total Siswa', value: summary.total_students, icon: 'ri-team-line', color: 'text-green-600 bg-green-50' },
+            { label: 'Kunjungan Hari Ini', value: summary.today_visits, icon: 'ri-user-follow-line', color: 'text-emerald-600 bg-emerald-50' },
+            { label: 'Baru Bulan Ini', value: summary.new_this_month, icon: 'ri-user-received-line', color: 'text-blue-600 bg-blue-50' },
+            { label: 'Belum Mengembalikan', value: summary.not_returned, icon: 'ri-book-read-line', color: 'text-red-600 bg-red-50' },
           ].map((s, i) => (
             <div key={i} className="card-base flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${s.color}`}>
@@ -136,12 +180,6 @@ export default function Members() {
                 className="input-field w-full pl-11"
               />
             </div>
-
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field lg:w-48">
-              <option value="">Semua Status</option>
-              <option value="Returned">Sudah Dikembalikan</option>
-              <option value="NotReturned">Belum Mengembalikan</option>
-            </select>
           </div>
         </div>
 
@@ -153,7 +191,7 @@ export default function Members() {
                 <tr className="text-left text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100">
                   <th className="py-4 whitespace-nowrap pl-6 pr-4">NISN</th>
                   <th className="py-4 whitespace-nowrap px-4">Nama</th>
-                  <th className="py-4 whitespace-nowrap px-4 text-center">Status</th>
+                  <th className="py-4 whitespace-nowrap px-4 text-center">Kelas</th>
                   <th className="py-4 whitespace-nowrap px-4 text-center">
                     <div className="flex flex-col items-center gap-1">
                       <span>Total Pinjam</span>
@@ -164,39 +202,47 @@ export default function Members() {
                       </div>
                     </div>
                   </th>
-                  <th className="py-4 whitespace-nowrap pr-6 pl-4 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map(member => (
-                  <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="py-3 whitespace-nowrap pl-6 pr-4 text-sm font-mono text-gray-600">{member.nisn}</td>
-                    <td className="py-3 whitespace-nowrap px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                          <i className="ri-user-line text-emerald-600 text-sm" />
-                        </div>
-                        <span className="text-sm font-medium text-gray-800">{member.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 whitespace-nowrap px-4 text-center"><StatusBadge activeLoans={member.activeLoans} /></td>
-                    <td className="py-3 whitespace-nowrap px-4">
-                      <div className="flex flex-col items-center justify-center gap-1">
-                        <span className="text-sm font-bold text-gray-800">{member.totalBorrows}</span>
-                        <div className="flex items-center gap-2 text-[11px] font-bold bg-gray-50 px-2 py-0.5 rounded-md border border-gray-200">
-                          <span className="text-indigo-600" title="Buku Paket">{member.paketBorrows}</span>
-                          <span className="w-px h-3 bg-gray-300"></span>
-                          <span className="text-emerald-600" title="Buku Reguler">{member.regulerBorrows}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 whitespace-nowrap pr-6 pl-4 text-right">
-                      <button className="w-8 h-8 rounded-lg hover:bg-emerald-50 text-emerald-600 flex items-center justify-center ml-auto transition-colors">
-                        <i className="ri-eye-line" />
-                      </button>
+                {loading ? (
+                  <tr>
+                    <td colSpan="4" className="py-8 text-center text-gray-400 text-sm">
+                      Memuat data...
                     </td>
                   </tr>
-                ))}
+                ) : members.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" className="py-8 text-center text-gray-400 text-sm">
+                      Tidak ada data siswa ditemukan
+                    </td>
+                  </tr>
+                ) : (
+                  members.map(member => (
+                    <tr key={member.nisn} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="py-3 whitespace-nowrap pl-6 pr-4 text-sm font-mono text-gray-600">{member.nisn}</td>
+                      <td className="py-3 whitespace-nowrap px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                            <i className="ri-user-line text-emerald-600 text-sm" />
+                          </div>
+                          <span className="text-sm font-medium text-gray-800">{member.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 whitespace-nowrap px-4 text-center text-sm text-gray-600">{member.class || '-'}</td>
+                      <td className="py-3 whitespace-nowrap px-4">
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <span className="text-sm font-bold text-gray-800">{member.total_borrowed}</span>
+                          <div className="flex items-center gap-2 text-[11px] font-bold bg-gray-50 px-2 py-0.5 rounded-md border border-gray-200">
+                            <span className="text-indigo-600" title="Buku Paket">{member.total_paket}</span>
+                            <span className="w-px h-3 bg-gray-300"></span>
+                            <span className="text-emerald-600" title="Buku Reguler">{member.total_reguler}</span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -219,20 +265,28 @@ export default function Members() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {allBorrowingTransactions.slice(0, 10).map(trx => (
-                      <tr key={trx.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="py-3 whitespace-nowrap pl-6 px-4 text-sm font-medium text-gray-800">{trx.memberName}</td>
-                        <td className="py-3 whitespace-nowrap px-4 text-sm text-gray-600 truncate max-w-[150px]">{trx.books.join(', ')}</td>
-                        <td className="py-3 whitespace-nowrap px-4 text-sm text-gray-500">{trx.borrowDate}</td>
-                        <td className="py-3 whitespace-nowrap pr-6 text-right text-xs">
-                          {trx.status === 'Returned' ? (
-                              <span className="text-emerald-600 font-semibold">Dikembalikan</span>
-                          ) : (
-                              <span className="text-amber-600 font-semibold">Dipinjam</span>
-                          )}
-                        </td>
+                    {loansLog.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="py-8 text-center text-gray-400 text-sm">Tidak ada riwayat transaksi</td>
                       </tr>
-                    ))}
+                    ) : (
+                      loansLog.slice(0, 10).map(trx => (
+                        <tr key={trx.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="py-3 whitespace-nowrap pl-6 px-4 text-sm font-medium text-gray-800">{trx.borrower_name}</td>
+                          <td className="py-3 whitespace-nowrap px-4 text-sm text-gray-600 truncate max-w-[150px]">{trx.book_title}</td>
+                          <td className="py-3 whitespace-nowrap px-4 text-sm text-gray-500">
+                            {trx.borrow_date ? new Date(trx.borrow_date).toLocaleDateString('id-ID') : '-'}
+                          </td>
+                          <td className="py-3 whitespace-nowrap pr-6 text-right text-xs">
+                            {trx.status === 'returned' || trx.status === 'dikembalikan' ? (
+                                <span className="text-emerald-600 font-semibold">Dikembalikan</span>
+                            ) : (
+                                <span className="text-amber-600 font-semibold">Dipinjam</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -241,28 +295,34 @@ export default function Members() {
             {/* Log Pengunjung */}
             <div className="card-base overflow-hidden p-0">
               <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="font-semibold text-gray-800">Log Pengunjung</h3>
-                <span className="text-xs text-gray-500">{visitors.filter(v => v.date === '2026-05-13').length} hari ini</span>
+                <h3 className="font-semibold text-gray-800">Top Pengunjung (30 Hari Terakhir)</h3>
+                <span className="text-xs text-gray-500">{topVisitors.length} siswa teraktif</span>
               </div>
               <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100 sticky top-0">
-                      <th className="py-3 whitespace-nowrap pl-6 px-4">Tanggal</th>
-                      <th className="py-3 whitespace-nowrap px-4">Jam</th>
+                      <th className="py-3 whitespace-nowrap pl-6 px-4">Rank</th>
+                      <th className="py-3 whitespace-nowrap px-4">Nama</th>
                       <th className="py-3 whitespace-nowrap px-4">NISN</th>
-                      <th className="py-3 whitespace-nowrap pr-6 text-right">Nama</th>
+                      <th className="py-3 whitespace-nowrap pr-6 text-right">Total Kunjungan</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {visitors.filter(v => v.date === '2026-05-13').map(visitor => (
-                      <tr key={visitor.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="py-3 whitespace-nowrap pl-6 px-4 text-sm text-gray-500">{visitor.date}</td>
-                        <td className="py-3 whitespace-nowrap px-4 text-sm text-gray-500">{visitor.checkInTime}</td>
-                        <td className="py-3 whitespace-nowrap px-4 text-sm font-mono text-gray-600">{visitor.nisn}</td>
-                        <td className="py-3 whitespace-nowrap pr-6 text-sm font-medium text-gray-800 text-right">{visitor.name}</td>
+                    {topVisitors.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="py-8 text-center text-gray-400 text-sm">Tidak ada data kunjungan</td>
                       </tr>
-                    ))}
+                    ) : (
+                      topVisitors.map(visitor => (
+                        <tr key={visitor.rank} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="py-3 whitespace-nowrap pl-6 px-4 text-sm font-bold text-gray-500">#{visitor.rank}</td>
+                          <td className="py-3 whitespace-nowrap px-4 text-sm font-medium text-gray-800">{visitor.name}</td>
+                          <td className="py-3 whitespace-nowrap px-4 text-sm font-mono text-gray-600">{visitor.nisn}</td>
+                          <td className="py-3 whitespace-nowrap pr-6 text-sm font-bold text-emerald-600 text-right">{visitor.total_kunjungan}x</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -288,7 +348,7 @@ export default function Members() {
 
                     <div className="p-6 space-y-4 bg-white min-h-[300px]">
                         <div className="relative">
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Pencarian NISN Siswa</label>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Pencarian NISN/Nama Siswa Sekolah</label>
                             <div className="relative">
                                 <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                 <input 
@@ -299,14 +359,14 @@ export default function Members() {
                                         setSelectedStudent(null);
                                         setNewMember({...newMember, nisn: e.target.value, name: ''});
                                     }} 
-                                    placeholder="Ketik NISN siswa baru..."
+                                    placeholder="Ketik NISN atau nama siswa sekolah..."
                                     className="input-field w-full pl-10" 
                                 />
                             </div>
                             {/* Dropdown Hasil Pencarian Siswa */}
-                            {searchSiswa && !selectedStudent && filteredSchoolStudents.length > 0 && (
+                            {searchSiswa && !selectedStudent && schoolStudents.length > 0 && (
                                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                                    {filteredSchoolStudents.map(m => (
+                                    {schoolStudents.map(m => (
                                         <button 
                                             key={m.nisn} 
                                             onClick={() => handleSelectStudent(m)}
@@ -314,7 +374,7 @@ export default function Members() {
                                         >
                                             <div className="font-semibold text-emerald-700">{m.nisn}</div>
                                             <div className="text-sm text-gray-800">{m.name}</div>
-                                            <div className="text-xs text-gray-500">Kelas: {m.className}</div>
+                                            <div className="text-xs text-gray-500">Kelas: {m.class || '-'}</div>
                                         </button>
                                     ))}
                                 </div>
@@ -327,6 +387,16 @@ export default function Members() {
                                 value={newMember.name} 
                                 readOnly 
                                 placeholder="Nama siswa akan terisi otomatis"
+                                className="input-field w-full bg-gray-50 text-gray-500 cursor-not-allowed border-gray-200" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Kelas (Autofill)</label>
+                            <input 
+                                type="text" 
+                                value={newMember.class} 
+                                readOnly 
+                                placeholder="Kelas siswa akan terisi otomatis"
                                 className="input-field w-full bg-gray-50 text-gray-500 cursor-not-allowed border-gray-200" 
                             />
                         </div>

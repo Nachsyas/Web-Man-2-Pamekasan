@@ -14,6 +14,7 @@ export default function SiswaHistory() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [loans, setLoans] = useState([]);
+  const [summary, setSummary] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const nisn = localStorage.getItem('siswa_nisn') || '';
 
@@ -21,33 +22,33 @@ export default function SiswaHistory() {
     if (!nisn) return;
     setIsLoading(true);
     try {
-      const res = await api.getLoansByNisn(nisn);
-      const mapped = res.data.map(l => {
-        const bookData = Array.isArray(l.books) ? l.books[0] : l.books;
-        
-        let status = 'returned';
-        if (!l.return_date) {
-          const dueDate = new Date(l.due_date);
-          dueDate.setHours(23, 59, 59, 999);
-          status = new Date() > dueDate ? 'overdue' : 'active';
-        }
+      let apiStatus = '';
+      if (filter === 'active') apiStatus = 'dipinjam';
+      else if (filter === 'overdue') apiStatus = 'terlambat';
+      else if (filter === 'returned') apiStatus = 'dikembalikan';
 
-        const daysLate = !l.return_date && status === 'overdue'
-          ? Math.ceil((new Date() - new Date(l.due_date)) / (1000 * 60 * 60 * 24))
-          : 0;
+      const res = await api.getStudentHistory(search, apiStatus);
+      setSummary(res.summary || {});
+      const dataList = res.data || [];
+      const mapped = dataList.map(l => {
+        const statLower = (l.status || '').toLowerCase();
+        let status = 'returned';
+        if (statLower === 'dipinjam' || statLower === 'borrowed') status = 'active';
+        else if (statLower === 'terlambat' || statLower === 'overdue') status = 'overdue';
+        else if (statLower === 'dikembalikan' || statLower === 'returned') status = 'returned';
+        else status = l.status;
 
         return {
           id: l.id,
-          bookTitle: bookData?.title || 'Buku Perpustakaan',
-          author: bookData?.author || '-',
-          borrowDate: l.borrow_date,
-          dueDate: l.due_date,
+          transactionCode: l.transaction_code || `TRX-${l.id}`,
+          bookTitle: l.book_title || 'Buku Perpustakaan',
+          author: l.book_author || '-',
+          borrowDate: l.borrow_date ? l.borrow_date.split('T')[0] : '-',
+          dueDate: l.due_date ? l.due_date.split('T')[0] : '-',
           returnDate: l.return_date ? l.return_date.split('T')[0] : null,
           status: status,
-          fine: daysLate > 0 ? daysLate * 5000 : 0,
-          type: (bookData?.category === 'paket' || 
-                 (bookData?.subject && bookData.subject.toLowerCase().includes('pelajaran')) || 
-                 (bookData?.title && bookData.title.toLowerCase().includes('kelas'))) ? 'Paket' : 'Reguler',
+          fine: l.fine || 0,
+          type: l.category === 'paket' ? 'Paket' : 'Reguler',
         };
       });
       setLoans(mapped);
@@ -60,21 +61,15 @@ export default function SiswaHistory() {
 
   useEffect(() => {
     fetchHistory();
-  }, [nisn]);
+  }, [nisn, filter, search]);
 
-  const filtered = loans.filter((b) => {
-    const matchesFilter = filter === 'all' || b.status === filter;
-    const matchesSearch =
-      b.bookTitle.toLowerCase().includes(search.toLowerCase()) ||
-      b.author.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  const filtered = loans;
 
   const filterTabs = [
-    { key: 'all', label: 'Semua', count: loans.length },
-    { key: 'active', label: 'Dipinjam', count: loans.filter((b) => b.status === 'active').length },
-    { key: 'overdue', label: 'Terlambat', count: loans.filter((b) => b.status === 'overdue').length },
-    { key: 'returned', label: 'Dikembalikan', count: loans.filter((b) => b.status === 'returned').length },
+    { key: 'all', label: 'Semua', count: summary.semua || 0 },
+    { key: 'active', label: 'Dipinjam', count: summary.dipinjam || 0 },
+    { key: 'overdue', label: 'Terlambat', count: summary.terlambat || 0 },
+    { key: 'returned', label: 'Dikembalikan', count: summary.dikembalikan || 0 },
   ];
 
   return (
@@ -86,24 +81,6 @@ export default function SiswaHistory() {
           <p className="text-dark-500 mt-1">Lihat semua riwayat peminjaman dan status buku Anda</p>
         </div>
 
-        {/* Manual borrow section */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center">
-                <i className="ri-hand-coin-line text-xl text-primary-500" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-dark-800">Pinjam Buku Manual</h3>
-                <p className="text-sm text-dark-500">Input kode buku atau judul untuk meminjam</p>
-              </div>
-            </div>
-            <Link to="/siswa/buku" className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm self-start lg:self-auto transition-colors">
-              <i className="ri-book-open-line" />
-              <span>Pilih dari Katalog</span>
-            </Link>
-          </div>
-        </div>
 
         {/* Search and filter tabs */}
         <div className="flex flex-col sm:flex-row gap-4">
@@ -174,7 +151,7 @@ export default function SiswaHistory() {
                         {b.type}
                       </span>
                     </td>
-                    <td className="py-4 text-sm text-gray-600 font-mono">TRX-{b.id}</td>
+                    <td className="py-4 text-sm text-gray-600 font-mono">{b.transactionCode}</td>
                     <td className="py-4 text-sm text-gray-600">{b.borrowDate}</td>
                     <td className="py-4 text-sm text-gray-600">{b.dueDate}</td>
                     <td className="py-4 text-sm text-gray-600">{b.returnDate || '-'}</td>

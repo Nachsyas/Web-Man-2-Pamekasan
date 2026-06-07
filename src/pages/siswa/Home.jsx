@@ -12,6 +12,8 @@ function StatusBadge({ status }) {
 
 export default function SiswaHome() {
   const [loans, setLoans] = useState([]);
+  const [summary, setSummary] = useState({});
+  const [clearance, setClearance] = useState({ is_eligible: true });
   const [isLoading, setIsLoading] = useState(true);
   const nisn = localStorage.getItem('siswa_nisn') || '';
   const nama = localStorage.getItem('siswa_nama') || 'Siswa';
@@ -20,28 +22,39 @@ export default function SiswaHome() {
     if (!nisn) return;
     setIsLoading(true);
     try {
-      const res = await api.getLoansByNisn(nisn);
-      const mapped = res.data.map(l => {
-        const bookData = Array.isArray(l.books) ? l.books[0] : l.books;
-        
+      const res = await api.getStudentDashboard();
+      setSummary(res.summary || {});
+      if (res.clearance) {
+        setClearance({
+          is_eligible: res.clearance.is_available || false,
+          ...res.clearance
+        });
+      }
+      const recentLoans = res.recent_loans || [];
+      const mapped = recentLoans.map(l => {
+        const statLower = (l.status || '').toLowerCase();
         let status = 'returned';
-        if (!l.return_date) {
-          const dueDate = new Date(l.due_date);
-          dueDate.setHours(23, 59, 59, 999);
-          status = new Date() > dueDate ? 'overdue' : 'active';
+        if (statLower === 'dipinjam' || statLower === 'borrowed') status = 'active';
+        else if (statLower === 'terlambat' || statLower === 'overdue') status = 'overdue';
+        else if (statLower === 'dikembalikan' || statLower === 'returned') status = 'returned';
+        else status = l.status; // fallback e.g. 'belum diganti'
+
+        // Calculate fine
+        let fine = 0;
+        if (l.fine !== undefined) fine = l.fine;
+        else if (status === 'overdue') {
+          fine = Math.max(0, Math.ceil((new Date() - new Date(l.due_date)) / (1000 * 60 * 60 * 24)) * 5000);
         }
 
         return {
           id: l.id,
-          bookTitle: bookData?.title || 'Buku Perpustakaan',
-          author: bookData?.author || '-',
-          borrowDate: l.borrow_date,
-          dueDate: l.due_date,
+          bookTitle: l.book_title || 'Buku Perpustakaan',
+          author: l.book_author || '-',
+          borrowDate: l.borrow_date ? l.borrow_date.split('T')[0] : '-',
+          dueDate: l.due_date ? l.due_date.split('T')[0] : '-',
           status: status,
-          fine: status === 'overdue' ? Math.max(0, Math.ceil((new Date() - new Date(l.due_date)) / (1000 * 60 * 60 * 24)) * 5000) : 0,
-          type: (bookData?.category === 'paket' || 
-                 (bookData?.subject && bookData.subject.toLowerCase().includes('pelajaran')) || 
-                 (bookData?.title && bookData.title.toLowerCase().includes('kelas'))) ? 'Paket' : 'Reguler',
+          fine: fine,
+          type: l.category === 'paket' ? 'Paket' : 'Reguler',
         };
       });
       setLoans(mapped);
@@ -62,12 +75,12 @@ export default function SiswaHome() {
   const returnedLoans = loans.filter((b) => b.status === 'returned');
   const latestBorrowings = [...loans].slice(0, 4);
   
-  const hasClearanceApproved = false;
-  const hasPendingClearance = false;
+  const hasClearanceApproved = clearance.is_eligible;
 
-  const totalBorrows = loans.length;
-  const activeLoansCount = activeLoans.length;
-  const overdueLoansCount = loans.filter((b) => b.status === 'overdue').length;
+  const totalBorrows = summary.total_peminjaman || loans.length;
+  const activeLoansCount = summary.buku_dipinjam || activeLoans.length;
+  const overdueLoansCount = summary.terlambat || loans.filter((b) => b.status === 'overdue').length;
+  const returnedLoansCount = summary.dikembalikan || returnedLoans.length;
 
   const renderLoanCards = (loansList) => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -132,19 +145,12 @@ export default function SiswaHome() {
                 Siswa &middot; NISN: {nisn}
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <Link
-                to="/siswa/buku"
-                className="bg-primary-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm hover:bg-primary-700 transition-colors"
-              >
-                <i className="ri-book-open-line" />
-                <span>Pinjam Buku</span>
-              </Link>
+             <div className="flex items-center gap-3">
               <Link
                 to="/siswa/bebas-tanggungan"
-                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 text-sm hover:bg-gray-50 transition-colors"
+                className="bg-primary-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-primary-700 transition-colors shadow-sm"
               >
-                <i className="ri-file-list-3-line" />
+                <i className="ri-file-list-3-line text-lg" />
                 <span>Surat Bebas</span>
               </Link>
             </div>
@@ -165,7 +171,7 @@ export default function SiswaHome() {
               <p className="text-xs text-dark-400">Terlambat</p>
             </div>
             <div className="text-center lg:text-left">
-              <p className="text-2xl font-bold text-blue-500">{returnedLoans.length}</p>
+              <p className="text-2xl font-bold text-blue-500">{returnedLoansCount}</p>
               <p className="text-xs text-dark-400">Dikembalikan</p>
             </div>
           </div>
@@ -208,10 +214,8 @@ export default function SiswaHome() {
                 <h3 className="font-semibold text-dark-800">Surat Bebas Tanggungan</h3>
                 <p className="text-sm text-dark-500 mt-0.5">
                   {hasClearanceApproved
-                    ? 'Surat bebas tanggungan Anda telah disetujui. Silakan unduh dokumen.'
-                    : hasPendingClearance
-                    ? 'Pengajuan surat bebas tanggungan sedang diproses.'
-                    : 'Ajukan surat bebas tanggungan jika tidak ada buku yang dipinjam.'}
+                    ? 'Anda tidak memiliki pinjaman aktif. Surat bebas tanggungan siap dicetak.'
+                    : `Anda masih memiliki ${activeLoans.length} buku yang sedang dipinjam. Kembalikan buku untuk mencetak surat bebas.`}
                 </p>
               </div>
             </div>
@@ -219,14 +223,14 @@ export default function SiswaHome() {
               to="/siswa/bebas-tanggungan"
               className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 hasClearanceApproved
-                  ? 'bg-primary-500 text-white hover:bg-primary-600'
-                  : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                  ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-sm'
+                  : 'border border-gray-300 text-gray-700 hover:bg-gray-50 bg-white'
               }`}
             >
               {hasClearanceApproved ? (
                 <>
-                  <i className="ri-download-line" />
-                  <span>Unduh</span>
+                  <i className="ri-file-pdf-line" />
+                  <span>Unduh PDF</span>
                 </>
               ) : (
                 <>

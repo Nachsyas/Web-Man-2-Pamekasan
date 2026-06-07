@@ -34,11 +34,11 @@ export default function SiswaAccess() {
       await api.checkIn(nisn.trim(), nama.trim());
 
       // 2. Perform login to obtain token
-      const loginResponse = await api.loginSiswa(nisn.trim());
+      const loginResponse = await api.loginSiswa(nisn.trim(), nama.trim());
 
       localStorage.setItem('access_token', loginResponse.access_token);
       localStorage.setItem('siswa_nisn', loginResponse.student.nisn);
-      localStorage.setItem('siswa_nama', loginResponse.student.nama);
+      localStorage.setItem('siswa_nama', loginResponse.student.nama || loginResponse.student.name);
 
       navigate('/siswa');
     } catch (err) {

@@ -8,7 +8,6 @@ const navItems = [
   { label: 'Pengembalian', path: '/pustakawan/pengembalian', icon: 'ri-arrow-go-back-line' },
   { label: 'Siswa', path: '/pustakawan/anggota', icon: 'ri-user-line' },
   { label: 'Laporan', path: '/pustakawan/laporan', icon: 'ri-file-chart-line' },
-  { label: 'Pengaturan', path: '/pustakawan/pengaturan', icon: 'ri-settings-3-line' },
 ];
 
 export default function Sidebar({ isOpen, onClose, userName, userNisn, logoUrl }) {
