@@ -1,4 +1,4 @@
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import * as XLSX from 'xlsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
 import { bookRacks } from '../../mocks/books';
@@ -45,13 +45,13 @@ export default function Books() {
   
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
   
   // State Khusus Import Excel
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
   const fileInputRef = useRef(null);
 
   const [editingBook, setEditingBook] = useState(null);
@@ -125,35 +125,7 @@ export default function Books() {
     fetchBooks();
   }, [search, typeFilter]);
 
-  // Efek Kamera Scan Barcode
-  useEffect(() => {
-    if (showScanner) {
-      const scanner = new Html5QrcodeScanner("reader", { 
-        qrbox: { width: 260, height: 120 },
-        fps: 8,
-      });
-      
-      scanner.render(
-        (decodedText) => {
-          setForm({
-            title: 'Buku Hasil Scan Kamera', 
-            isbn: decodedText,
-            category: '',
-            type: 'Buku Reguler',
-            stock: '',
-            rack: '',
-          });
-          scanner.clear();
-          setShowScanner(false);
-          setShowFormModal(true);
-          setToast(`Barcode ${decodedText} berhasil dipindai!`);
-          setTimeout(() => setToast(''), 3000);
-        },
-        (error) => {} // Frame scanner error ignored
-      );
-      return () => { scanner.clear().catch(e => console.error("Gagal membersihkan scanner", e)); };
-    }
-  }, [showScanner]);
+  // Scanner removed as requested
 
   const filteredBooks = useMemo(() => {
     return books.filter(b => {
@@ -241,25 +213,148 @@ export default function Books() {
     }
   };
 
-  // Logika Simulasi Import Excel
+  // Logika Import Excel
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setImportFile(e.target.files[0]);
     }
   };
 
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Judul Buku',
+      'ISBN',
+      'Penulis',
+      'Penerbit',
+      'Tahun Terbit',
+      'Jumlah Halaman',
+      'Stok',
+      'Nomor Klasifikasi',
+      'Lokasi Rak',
+      'Jenis Buku',
+      'Subjek/Kategori'
+    ];
+    
+    const data = [
+      {
+        'Judul Buku': 'Bedebah di Ujung Tanduk',
+        'ISBN': '9786020656860',
+        'Penulis': 'Tere Liye',
+        'Penerbit': 'Gramedia Pustaka Utama',
+        'Tahun Terbit': 2021,
+        'Jumlah Halaman': 382,
+        'Stok': 15,
+        'Nomor Klasifikasi': '813',
+        'Lokasi Rak': 'Rak A1',
+        'Jenis Buku': 'Reguler',
+        'Subjek/Kategori': 'Fiksi / Novel'
+      },
+      {
+        'Judul Buku': 'Bahasa Indonesia Kelas X',
+        'ISBN': '9786022443122',
+        'Penulis': 'Kementerian Pendidikan dan Kebudayaan',
+        'Penerbit': 'Kemendikbud',
+        'Tahun Terbit': 2021,
+        'Jumlah Halaman': 250,
+        'Stok': 40,
+        'Nomor Klasifikasi': '370',
+        'Lokasi Rak': 'Rak Paket X',
+        'Jenis Buku': 'Paket',
+        'Subjek/Kategori': 'Bahasa Indonesia'
+      }
+    ];
+    
+    const worksheet = XLSX.utils.json_to_sheet(data, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Pendataan Buku');
+    
+    XLSX.writeFile(workbook, 'template_pendataan_buku.xlsx');
+    setToast('Template Excel berhasil diunduh!');
+    setTimeout(() => setToast(''), 3000);
+  };
+
   const processImport = () => {
     if (!importFile) return;
     setIsImporting(true);
+    setImportProgress('Membaca file Excel...');
     
-    // Simulasi proses pembacaan file Excel (Nanti diintegrasikan dengan library 'xlsx' SheetJS)
-    setTimeout(() => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet);
+        
+        if (json.length === 0) {
+          throw new Error('File Excel kosong atau tidak memiliki data.');
+        }
+        
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (let i = 0; i < json.length; i++) {
+          const row = json[i];
+          setImportProgress(`Mengimpor ${i + 1} dari ${json.length} buku...`);
+          
+          const title = row['Judul Buku'];
+          const isbn = row['ISBN'] ? String(row['ISBN']) : '';
+          
+          if (!title || !isbn) {
+            failCount++;
+            continue;
+          }
+          
+          const rawType = row['Jenis Buku'] || 'Reguler';
+          const categoryVal = rawType.toLowerCase().includes('paket') ? 'paket' : 'reguler';
+          
+          const payload = {
+            classification_number: String(row['Nomor Klasifikasi'] || '000'),
+            author: row['Penulis'] || 'Pustakawan',
+            title: title,
+            edition: row['Edisi'] || 'Cetakan 1',
+            publication_place: row['Tempat Terbit'] || 'Pamekasan',
+            publisher: row['Penerbit'] || 'MAN 2 Pamekasan',
+            publication_year: parseInt(row['Tahun Terbit']) || new Date().getFullYear(),
+            total_pages: parseInt(row['Jumlah Halaman']) || 100,
+            subject: row['Subjek/Kategori'] || 'Umum',
+            stock: parseInt(row['Stok']) || 0,
+            category: categoryVal,
+            rack_location: row['Lokasi Rak'] || 'Rak Umum',
+            isbn: isbn,
+          };
+          
+          try {
+            await api.createBook(payload);
+            successCount++;
+          } catch (err) {
+            console.error(`Gagal mengimpor baris ${i + 1}:`, err);
+            failCount++;
+          }
+        }
+        
+        setToast(`Import selesai! Berhasil: ${successCount}, Gagal: ${failCount}`);
+        fetchBooks();
+        setShowImportModal(false);
+        setImportFile(null);
+      } catch (err) {
+        setToast(`Gagal mengimpor: ${err.message}`);
+      } finally {
+        setIsImporting(false);
+        setImportProgress('');
+        setTimeout(() => setToast(''), 4000);
+      }
+    };
+    
+    reader.onerror = () => {
+      setToast('Gagal membaca file Excel.');
       setIsImporting(false);
-      setShowImportModal(false);
-      setImportFile(null);
-      setToast(`Berhasil mengimpor data dari ${importFile.name}!`);
-      setTimeout(() => setToast(''), 4000);
-    }, 2000);
+      setImportProgress('');
+      setTimeout(() => setToast(''), 3000);
+    };
+    
+    reader.readAsArrayBuffer(importFile);
   };
 
   const [customCategoriesReguler, setCustomCategoriesReguler] = useState(() => {
@@ -327,9 +422,7 @@ export default function Books() {
                 <button onClick={() => setShowImportModal(true)} className="bg-white border-2 border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 active:scale-95 shadow-sm">
                     <i className="ri-file-excel-2-line text-lg text-green-600" /> Import Excel
                 </button>
-                <button onClick={() => setShowScanner(true)} className="bg-white border-2 border-emerald-100 text-emerald-600 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-emerald-50 hover:border-emerald-200 hover:shadow-sm transition-all duration-200 active:scale-95 shadow-sm">
-                    <i className="ri-qr-scan-2-line text-lg" /> Kamera Scan
-                </button>
+
                 <button onClick={() => { setEditingBook(null); setForm({ type: 'Buku Reguler', category: '', condition: 'Available' }); setShowFormModal(true); }} className="bg-emerald-500 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-emerald-600 hover:shadow-md transition-all duration-200 active:scale-95 shadow-sm border border-emerald-600">
                     <i className="ri-add-line text-lg" /> Tambah Buku
                 </button>
@@ -441,7 +534,7 @@ export default function Books() {
                             <div>
                                 <p className="text-sm font-semibold text-blue-900 mb-1">Butuh Format Excel yang benar?</p>
                                 <p className="text-xs text-blue-700/80 mb-3 leading-relaxed">Unduh template Excel kami agar sistem dapat membaca kolom Judul, ISBN, Kategori, dan Stok dengan sempurna tanpa error.</p>
-                                <button className="bg-white border border-blue-200 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
+                                <button onClick={handleDownloadTemplate} className="bg-white border border-blue-200 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
                                     <i className="ri-download-2-line" /> Unduh Template .XLSX
                                 </button>
                             </div>
@@ -489,7 +582,7 @@ export default function Books() {
                         <button onClick={() => { setShowImportModal(false); setImportFile(null); }} className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 transition-colors text-sm bg-white shadow-sm" disabled={isImporting}>Batal</button>
                         <button onClick={processImport} disabled={!importFile || isImporting} className={`px-8 py-2.5 rounded-xl text-white font-bold transition-all duration-200 text-sm shadow-sm flex items-center gap-2 ${!importFile ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-600 hover:shadow-md active:scale-95 border border-emerald-600'}`}>
                             {isImporting ? (
-                                <> <i className="ri-loader-4-line animate-spin" /> Memproses... </>
+                                <> <i className="ri-loader-4-line animate-spin" /> {importProgress || 'Memproses...'} </>
                             ) : (
                                 <> <i className="ri-upload-2-fill" /> Mulai Import </>
                             )}
@@ -597,23 +690,7 @@ export default function Books() {
             </div>
         )}
 
-        {/* MODAL 2: SCANNER CAMERA DIRECT */}
-        {showScanner && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/80 backdrop-blur-sm">
-                <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in relative border border-emerald-100">
-                    <button onClick={() => setShowScanner(false)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors z-10">
-                        <i className="ri-close-line text-lg" />
-                    </button>
-                    <h3 className="font-bold text-xl text-gray-800 mb-4 text-center">Pindai Barcode Kamera</h3>
-                    <div className="rounded-xl overflow-hidden border-4 border-emerald-100 mb-4 bg-black relative">
-                        <div id="reader" className="w-full" />
-                    </div>
-                    <p className="text-xs text-gray-500 text-center leading-relaxed">
-                        Arahkan jendela kamera tepat ke deretan kode <span className="font-bold text-emerald-600">ISBN</span> buku paket untuk pengisian baris kode otomatis.
-                    </p>
-                </div>
-            </div>
-        )}
+
 
         {/* MODAL 3: PREVIEW PRINT LABEL */}
         {showLabelModal && editingBook && (

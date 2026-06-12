@@ -41,6 +41,8 @@ export default function Returns() {
           status: (l.status === 'overdue' || l.status === 'terlambat') ? 'Overdue' : (l.status === 'dipinjam' || l.status === 'borrowed') ? 'Borrowed' : l.status,
           type: l.type || (l.category === 'paket' ? 'Paket' : 'Reguler'),
           fine: fineVal,
+          author: l.author || '',
+          isbn: l.isbn || '',
         };
       });
       setTransactions(mapped);
@@ -299,11 +301,11 @@ export default function Returns() {
           const baseFine = daysLate * 5000;
           
           const firstBookTitle = foundTrx.books[0] || '';
-          const bookDetails = booksMock.find(b => b.title === firstBookTitle) || {
+          const bookDetails = {
             title: firstBookTitle,
-            author: '-',
-            isbn: '-',
-            category: 'Reguler'
+            author: foundTrx.author || '-',
+            isbn: foundTrx.isbn || '-',
+            category: foundTrx.type || 'Reguler'
           };
 
           // Format Date ID

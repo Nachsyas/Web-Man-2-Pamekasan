@@ -2,33 +2,109 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
 import { api } from '../../services/api';
+import html2pdf from 'html2pdf.js';
 
 const colors = ['#10B981', '#3B82F6', '#EF4444', '#EC4899', '#F59E0B', '#8B5CF6', '#14B8A6', '#F97316', '#6366F1', '#06B6D4'];
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+};
 
 export default function Reports() {
   const [dateFrom, setDateFrom] = useState('2026-01-01');
   const [dateTo, setDateTo] = useState('2026-12-31');
   const [reportType, setReportType] = useState('Peminjaman'); // 'Peminjaman', 'Pengembalian', 'Pengunjung'
-  const [reportData, setReportData] = useState(null);
+  const [peminjamanData, setPeminjamanData] = useState(null);
+  const [pengembalianData, setPengembalianData] = useState(null);
+  const [pengunjungData, setPengunjungData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  const reportData = useMemo(() => {
+    if (reportType === 'Peminjaman') return peminjamanData;
+    if (reportType === 'Pengembalian') return pengembalianData;
+    if (reportType === 'Pengunjung') return pengunjungData;
+    return null;
+  }, [reportType, peminjamanData, pengembalianData, pengunjungData]);
+
+  const handleDownloadPDF = async () => {
+    if (!peminjamanData || !pengembalianData || !pengunjungData) return;
+    setIsGeneratingPDF(true);
+    try {
+      const element = document.getElementById('report-pdf-template');
+      
+      // Create a temporary container at (0,0) to allow canvas engine sizing without clipping
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '0';
+      container.style.top = '0';
+      container.style.width = '210mm';
+      container.style.zIndex = '-9999';
+      container.style.pointerEvents = 'none';
+      container.style.background = 'white';
+      
+      const clone = element.cloneNode(true);
+      clone.style.display = 'block';
+      container.appendChild(clone);
+      document.body.appendChild(container);
+
+      const opt = {
+        margin:       0,
+        filename:     `laporan-perpustakaan-lengkap-${dateFrom}-to-${dateTo}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true, 
+          logging: false, 
+          letterRendering: true,
+          windowWidth: 1024,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'] }
+      };
+
+      await html2pdf().set(opt).from(clone).save();
+      
+      document.body.removeChild(container);
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchReport = async () => {
+    const fetchAllReports = async () => {
       setLoading(true);
       try {
-        const typeParam = reportType === 'Peminjaman' ? 'peminjaman' : reportType === 'Pengembalian' ? 'pengembalian' : 'pengunjung';
-        const res = await api.getReports(typeParam, dateFrom, dateTo);
-        if (res) {
-          setReportData(res);
-        }
+        const [pem, peng, visitor] = await Promise.all([
+          api.getReports('peminjaman', dateFrom, dateTo),
+          api.getReports('pengembalian', dateFrom, dateTo),
+          api.getReports('pengunjung', dateFrom, dateTo)
+        ]);
+        setPeminjamanData(pem);
+        setPengembalianData(peng);
+        setPengunjungData(visitor);
       } catch (err) {
         console.error('Failed to fetch report data:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchReport();
-  }, [reportType, dateFrom, dateTo]);
+    fetchAllReports();
+  }, [dateFrom, dateTo]);
 
   const chartData = useMemo(() => {
     if (!reportData || !reportData.monthly_statistics) return [];
@@ -51,7 +127,40 @@ export default function Reports() {
 
   return (
     <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
-      <div className="page-container space-y-6">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          /* Hide all interactive components */
+          aside, header, nav, select, input, button, .print-hidden, .page-container > div:not(.print-block) {
+            display: none !important;
+          }
+          
+          /* Reset root and body margins */
+          body, html, #root, main, .page-container {
+            background: white !important;
+            color: black !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
+            height: auto !important;
+          }
+
+          /* Printable container config */
+          .print-block {
+            display: block !important;
+            background: white !important;
+            color: black !important;
+            width: 100% !important;
+          }
+
+          /* Page breaks */
+          .page-break-inside-avoid {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}} />
+
+      <div className="page-container space-y-6 print:hidden">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -59,8 +168,21 @@ export default function Reports() {
             <p className="text-gray-500 mt-1">Analisis statistik perpustakaan dan layanan surat</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="btn-secondary" onClick={() => window.print()}>
-              <i className="ri-file-download-line" /> Cetak Laporan
+            <button 
+              className="btn-secondary flex items-center gap-2" 
+              onClick={handleDownloadPDF}
+              disabled={isGeneratingPDF || loading || !peminjamanData || !pengembalianData || !pengunjungData}
+            >
+              {isGeneratingPDF ? (
+                <>
+                  <div className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent text-emerald-600 rounded-full" role="status" aria-label="loading" />
+                  Mengunduh...
+                </>
+              ) : (
+                <>
+                  <i className="ri-file-download-line" /> Unduh Laporan (PDF)
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -268,6 +390,238 @@ export default function Reports() {
           </>
         )}
       </div>
+
+      {/* Print-Only Layout containing ALL reports */}
+      <div id="report-pdf-template" style={{ display: 'none', width: '210mm', boxSizing: 'border-box' }} className="bg-white p-[15mm] font-serif text-gray-900 leading-normal">
+         
+         {/* Kop Surat (Formal Indonesian Letterhead) */}
+         <div className="flex items-center border-b-4 border-double border-gray-900 pb-4 mb-6 gap-6">
+             <img
+                 src="/logo-kemenag.png"
+                 alt="Logo Kemenag"
+                 className="w-16 h-16 object-contain flex-shrink-0"
+             />
+             <div className="text-center flex-1">
+                 <h2 className="text-xs font-bold uppercase tracking-wider leading-none mb-1">Kementerian Agama Republik Indonesia</h2>
+                 <h2 className="text-[10px] font-semibold uppercase tracking-wider leading-none mb-1">Kantor Kementerian Agama Kabupaten Pamekasan</h2>
+                 <h1 className="text-sm font-extrabold uppercase tracking-wide leading-tight mb-1">Madrasah Aliyah Negeri 2 Pamekasan</h1>
+                 <p className="text-[9px] italic leading-tight">Jalan Wahid Hasyim No. 17, Pamekasan, Jawa Timur 69316</p>
+                 <p className="text-[9px] leading-tight mt-0.5">Telepon: (0324) 321456 | Website: web.man2pamekasan.sch.id | Email: perpustakaan@man2pamekasan.sch.id</p>
+             </div>
+             {/* Mirror placeholder to center text */}
+             <div className="w-16 h-16 flex-shrink-0 invisible" />
+         </div>
+
+         {/* Document Header */}
+         <div className="text-center mb-6">
+             <h2 className="text-sm font-bold uppercase underline">Laporan Lengkap Layanan & Aktivitas Perpustakaan</h2>
+             <p className="text-[10px] font-mono mt-1">Nomor: B-{Math.floor(1000 + Math.random() * 9000)}/Ma.13.26.2/PP.00.6/06/2026</p>
+         </div>
+
+         {/* Meta Laporan */}
+         <div className="grid grid-cols-2 gap-4 text-xs mb-6 border border-gray-200 p-3 rounded-lg bg-gray-50/50">
+             <div>
+                 <p><span className="font-bold">Jenis Laporan:</span> Laporan Aktivitas Keseluruhan (Peminjaman, Pengembalian, Pengunjung)</p>
+                 <p><span className="font-bold">Periode:</span> {formatDate(dateFrom)} s.d. {formatDate(dateTo)}</p>
+             </div>
+             <div className="text-right">
+                 <p><span className="font-bold">Tanggal Cetak:</span> {formatDate(new Date().toISOString().split('T')[0])}</p>
+                 <p><span className="font-bold">Petugas Pencetak:</span> Ibu Siti Aminah, S.Pd. (Pustakawan)</p>
+             </div>
+         </div>
+
+         {/* Section I: Ringkasan Statistik Laporan */}
+         <div className="mb-6" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+             <h3 className="text-xs font-bold uppercase border-b border-gray-400 pb-1 mb-3">I. Ringkasan Statistik Laporan</h3>
+             <table className="w-full text-xs text-left border-collapse border border-gray-300">
+                 <thead>
+                     <tr className="bg-gray-100">
+                         <th className="border border-gray-300 p-2.5 font-bold" style={{ width: '40%' }}>Parameter Indikator</th>
+                         <th className="border border-gray-300 p-2.5 text-right font-bold" style={{ width: '25%' }}>Nilai Capaian</th>
+                         <th className="border border-gray-300 p-2.5 pl-4" style={{ width: '35%' }}>Keterangan Aktivitas</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                     <tr>
+                         <td className="border border-gray-300 p-2.5">Total Transaksi Peminjaman</td>
+                         <td className="border border-gray-300 p-2.5 text-right font-bold">{peminjamanData?.summary?.total_peminjaman || 0} buku</td>
+                         <td className="border border-gray-300 p-2.5 pl-4">Total ekslempar buku dipinjam keluar</td>
+                     </tr>
+                     <tr>
+                         <td className="border border-gray-300 p-2.5">Total Buku Dikembalikan</td>
+                         <td className="border border-gray-300 p-2.5 text-right font-bold">{pengembalianData?.summary?.total_pengembalian || 0} buku</td>
+                         <td className="border border-gray-300 p-2.5 pl-4">Jumlah buku yang berhasil dikembalikan</td>
+                     </tr>
+                     <tr>
+                         <td className="border border-gray-300 p-2.5">Total Penerimaan Denda Terkumpul</td>
+                         <td className="border border-gray-300 p-2.5 text-right font-bold">Rp {(pengembalianData?.summary?.total_denda || 0).toLocaleString('id-ID')}</td>
+                         <td className="border border-gray-300 p-2.5 pl-4">Total denda keterlambatan / penggantian buku</td>
+                     </tr>
+                     <tr>
+                         <td className="border border-gray-300 p-2.5">Peminjaman Terlambat (Overdue)</td>
+                         <td className="border border-gray-300 p-2.5 text-right font-bold text-red-600">{peminjamanData?.summary?.terlambat || 0} buku</td>
+                         <td className="border border-gray-300 p-2.5 pl-4">Buku melewati jatuh tempo dan belum kembali</td>
+                     </tr>
+                     <tr>
+                         <td className="border border-gray-300 p-2.5">Total Kunjungan Siswa</td>
+                         <td className="border border-gray-300 p-2.5 text-right font-bold">{pengunjungData?.summary?.total_kunjungan || 0} kali</td>
+                         <td className="border border-gray-300 p-2.5 pl-4">Jumlah kedatangan siswa ke ruang baca perpustakaan</td>
+                     </tr>
+                     <tr>
+                         <td className="border border-gray-300 p-2.5">Siswa Terdaftar Berkunjung</td>
+                         <td className="border border-gray-300 p-2.5 text-right font-bold">{pengunjungData?.summary?.pengunjung || 0} orang</td>
+                         <td className="border border-gray-300 p-2.5 pl-4">Jumlah anggota unik yang berkunjung</td>
+                     </tr>
+                 </tbody>
+             </table>
+         </div>
+
+         {/* Page Break */}
+         <div className="html2pdf__page-break" />
+
+         {/* Section II: Detail Peminjaman & Pengembalian Buku */}
+         <div className="mb-6" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+             <h3 className="text-xs font-bold uppercase border-b border-gray-400 pb-1 mb-3">II. Detail Distribusi & Buku Terpopuler</h3>
+             
+             {/* Sub-section A: Distribusi Kategori Buku */}
+             <div className="mb-4">
+                 <h4 className="text-[11px] font-bold uppercase text-gray-700 mb-2">A. Distribusi Berdasarkan Kategori Buku</h4>
+                 <table className="w-full text-xs text-left border-collapse border border-gray-300">
+                     <thead>
+                         <tr className="bg-gray-100">
+                             <th className="border border-gray-300 p-2.5 font-bold">Kategori Buku</th>
+                             <th className="border border-gray-300 p-2.5 text-center font-bold" style={{ width: '30%' }}>Volume Transaksi</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {(peminjamanData?.category_distribution || []).map((d, i) => (
+                             <tr key={i}>
+                                 <td className="border border-gray-300 p-2.5">{d.name}</td>
+                                 <td className="border border-gray-300 p-2.5 text-center">{d.total}</td>
+                             </tr>
+                         ))}
+                         {(!peminjamanData?.category_distribution || peminjamanData.category_distribution.length === 0) && (
+                             <tr>
+                                 <td colSpan="2" className="border border-gray-300 p-2.5 text-center text-gray-500">Tidak ada data distribusi</td>
+                             </tr>
+                         )}
+                     </tbody>
+                 </table>
+             </div>
+
+             {/* Sub-section B: Buku Terpopuler */}
+             <div className="mt-6">
+                 <h4 className="text-[11px] font-bold uppercase text-gray-700 mb-2">B. Daftar Buku Terpopuler (Paling Banyak Dipinjam)</h4>
+                 <table className="w-full text-xs text-left border-collapse border border-gray-300">
+                     <thead>
+                         <tr className="bg-gray-100">
+                             <th className="border border-gray-300 p-2.5 font-bold text-center" style={{ width: '8%' }}>Peringkat</th>
+                             <th className="border border-gray-300 p-2.5 font-bold" style={{ width: '52%' }}>Judul Buku</th>
+                             <th className="border border-gray-300 p-2.5 font-bold text-center" style={{ width: '25%' }}>Frekuensi Peminjaman</th>
+                             <th className="border border-gray-300 p-2.5 font-bold text-center" style={{ width: '15%' }}>Persentase</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {(peminjamanData?.popular_books || []).map((item, idx) => (
+                             <tr key={idx}>
+                                 <td className="border border-gray-300 p-2.5 text-center">{idx + 1}</td>
+                                 <td className="border border-gray-300 p-2.5">{item.title}</td>
+                                 <td className="border border-gray-300 p-2.5 text-center font-bold">{item.total_peminjaman}</td>
+                                 <td className="border border-gray-300 p-2.5 text-center">{item.percentage || 0}%</td>
+                             </tr>
+                         ))}
+                         {(!peminjamanData?.popular_books || peminjamanData.popular_books.length === 0) && (
+                             <tr>
+                                 <td colSpan="4" className="border border-gray-300 p-2.5 text-center text-gray-500">Tidak ada data buku terpopuler</td>
+                             </tr>
+                         )}
+                     </tbody>
+                 </table>
+             </div>
+         </div>
+
+         {/* Page Break */}
+         <div className="html2pdf__page-break" />
+
+         {/* Section III: Detail Pengunjung & Siswa Teraktif */}
+         <div className="mb-6" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+             <h3 className="text-xs font-bold uppercase border-b border-gray-400 pb-1 mb-3">III. Detail Laporan Pengunjung</h3>
+             
+             {/* Sub-section A: Distribusi Kunjungan per Kelas */}
+             <div className="mb-4">
+                 <h4 className="text-[11px] font-bold uppercase text-gray-700 mb-2">A. Distribusi Kunjungan Berdasarkan Tingkat Kelas</h4>
+                 <table className="w-full text-xs text-left border-collapse border border-gray-300">
+                     <thead>
+                         <tr className="bg-gray-100">
+                             <th className="border border-gray-300 p-2.5 font-bold">Kelas</th>
+                             <th className="border border-gray-300 p-2.5 text-center font-bold" style={{ width: '30%' }}>Volume Kunjungan</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {(pengunjungData?.class_distribution || []).map((d, i) => (
+                             <tr key={i}>
+                                 <td className="border border-gray-300 p-2.5">{d.name}</td>
+                                 <td className="border border-gray-300 p-2.5 text-center">{d.total}</td>
+                             </tr>
+                         ))}
+                         {(!pengunjungData?.class_distribution || pengunjungData.class_distribution.length === 0) && (
+                             <tr>
+                                 <td colSpan="2" className="border border-gray-300 p-2.5 text-center text-gray-500">Tidak ada data distribusi</td>
+                             </tr>
+                         )}
+                     </tbody>
+                 </table>
+             </div>
+
+             {/* Sub-section B: Siswa Teraktif */}
+             <div className="mt-6">
+                 <h4 className="text-[11px] font-bold uppercase text-gray-700 mb-2">B. Daftar Pengunjung / Siswa Paling Aktif</h4>
+                 <table className="w-full text-xs text-left border-collapse border border-gray-300">
+                     <thead>
+                         <tr className="bg-gray-100">
+                             <th className="border border-gray-300 p-2.5 font-bold text-center" style={{ width: '8%' }}>No</th>
+                             <th className="border border-gray-300 p-2.5 font-bold" style={{ width: '42%' }}>Nama Siswa</th>
+                             <th className="border border-gray-300 p-2.5 font-bold" style={{ width: '20%' }}>NISN</th>
+                             <th className="border border-gray-300 p-2.5 font-bold text-center" style={{ width: '10%' }}>Kelas</th>
+                             <th className="border border-gray-300 p-2.5 font-bold text-center" style={{ width: '20%' }}>Frekuensi Kunjungan</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {(pengunjungData?.top_visitors || []).map((item, idx) => (
+                             <tr key={idx}>
+                                 <td className="border border-gray-300 p-2.5 text-center">{idx + 1}</td>
+                                 <td className="border border-gray-300 p-2.5">{item.name}</td>
+                                 <td className="border border-gray-300 p-2.5 font-mono">{item.nisn}</td>
+                                 <td className="border border-gray-300 p-2.5 text-center">{item.class || '-'}</td>
+                                 <td className="border border-gray-300 p-2.5 text-center font-bold">{item.total_kunjungan}</td>
+                             </tr>
+                         ))}
+                         {(!pengunjungData?.top_visitors || pengunjungData.top_visitors.length === 0) && (
+                             <tr>
+                                 <td colSpan="5" className="border border-gray-300 p-2.5 text-center text-gray-500">Tidak ada data siswa teraktif</td>
+                             </tr>
+                         )}
+                     </tbody>
+                 </table>
+             </div>
+         </div>
+
+         {/* Signature Block (Tanda Tangan) */}
+         <div className="flex justify-between items-start text-xs mt-12" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+             <div className="w-[200px]">
+                 {/* Empty left side signature */}
+             </div>
+             <div className="w-[250px] text-center">
+                 <p>Pamekasan, {formatDate(new Date().toISOString().split('T')[0])}</p>
+                 <p className="mt-1">Kepala Perpustakaan MAN 2 Pamekasan</p>
+                 <div className="h-20" />
+                 <p className="font-bold underline text-gray-900">Ibu Siti Aminah, S.Pd.</p>
+                 <p className="text-gray-500">NIP. 197508242005012001</p>
+             </div>
+         </div>
+
+      </div>
+
     </PustakawanLayout>
   );
 }

@@ -44,7 +44,7 @@ export default function SiswaClearance() {
   const isEligible = clearance.is_eligible && !isLoading;
 
   const handlePrint = async () => {
-    if (!nisn) return;
+    if (!nisn || !isEligible) return;
     setIsDownloading(true);
     try {
       if (!window.html2pdf) {
@@ -61,15 +61,41 @@ export default function SiswaClearance() {
       }
 
       const element = document.getElementById('pdf-content');
+      
+      // Create a temporary container at (0,0) to allow canvas engine sizing without viewport clipping
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '0';
+      container.style.top = '0';
+      container.style.width = '210mm';
+      container.style.zIndex = '-9999';
+      container.style.pointerEvents = 'none';
+      container.style.background = 'white';
+      
+      const clone = element.cloneNode(true);
+      clone.style.display = 'block';
+      container.appendChild(clone);
+      document.body.appendChild(container);
+
       const opt = {
-        margin:       [10, 10, 10, 10],
+        margin:       0,
         filename:     `Surat_Bebas_Perpustakaan_${nisn}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true, 
+          letterRendering: true, 
+          backgroundColor: '#ffffff',
+          windowWidth: 1024,
+          scrollX: 0,
+          scrollY: 0
+        },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
-      await window.html2pdf().from(element).set(opt).save();
+      await window.html2pdf().set(opt).from(clone).save();
+      
+      document.body.removeChild(container);
     } catch (err) {
       console.error('Gagal mengunduh PDF:', err);
       alert('Gagal mengunduh PDF secara otomatis. Mengalihkan ke menu cetak manual peramban...');
@@ -144,39 +170,116 @@ export default function SiswaClearance() {
             <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-gray-500 text-sm font-medium">Memverifikasi status tanggungan Anda...</p>
           </div>
-        ) : isEligible ? (
-          /* SUCCESS STATE: ELIGIBLE FOR CLEARANCE */
+        ) : (
           <div className="space-y-6">
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
-              <div className="flex gap-4">
-                <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
-                  <i className="ri-checkbox-circle-fill text-2xl" />
+            {/* Banner State */}
+            {isEligible ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+                <div className="flex gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+                    <i className="ri-checkbox-circle-fill text-2xl" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-emerald-800">Status: Bebas Tanggungan</h3>
+                    <p className="text-sm text-emerald-600/90 mt-0.5">
+                      Sistem memverifikasi Anda tidak memiliki buku pinjaman aktif. Anda dapat mengunduh surat bebas tanggungan dalam format PDF.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-emerald-800">Status: Bebas Tanggungan</h3>
-                  <p className="text-sm text-emerald-600/90 mt-0.5">
-                    Sistem memverifikasi Anda tidak memiliki buku pinjaman aktif. Anda dapat mengunduh surat bebas tanggungan dalam format PDF.
-                  </p>
+                <button
+                  onClick={handlePrint}
+                  disabled={isDownloading}
+                  className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm self-start sm:self-auto active:scale-95 duration-150 disabled:opacity-75 disabled:cursor-not-allowed flex-shrink-0"
+                >
+                  {isDownloading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Mengunduh PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-pdf-line text-lg" />
+                      <span>Unduh PDF</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+                <div className="flex gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+                    <i className="ri-error-warning-fill text-2xl" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-rose-800">Status: Belum Memenuhi Syarat</h3>
+                    <p className="text-sm text-rose-600/90 mt-0.5 leading-relaxed">
+                      Surat bebas tanggungan belum dapat diterbitkan. Anda terdeteksi masih memiliki <strong>{activeLoans.length} tanggungan aktif</strong>. Silakan selesaikan tanggungan Anda ke pustakawan.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  disabled={true}
+                  className="bg-gray-400 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold shadow-sm self-start sm:self-auto cursor-not-allowed opacity-75 flex-shrink-0"
+                  title="Kembalikan semua buku terlebih dahulu untuk mengaktifkan unduhan"
+                >
+                  <i className="ri-lock-line text-lg" />
+                  <span>Unduh Dinonaktifkan</span>
+                </button>
+              </div>
+            )}
+
+            {/* List of Active Loans (Only for Ineligible State) */}
+            {!isEligible && activeLoans.length > 0 && (
+              <div className="card-base overflow-hidden p-0 no-print">
+                <div className="p-5 border-b border-gray-100 bg-gray-50/50">
+                  <h3 className="font-bold text-gray-800 text-sm">Daftar Tanggungan Buku (Harus Dikembalikan)</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-xs text-gray-500 font-semibold border-b border-gray-100 bg-gray-50/30">
+                        <th className="py-3.5 pl-6 pr-4">Buku & Kondisi</th>
+                        <th className="py-3.5 px-4">Status</th>
+                        <th className="py-3.5 px-4 pr-6">Jenis Buku</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {activeLoans.map((loan) => {
+                        const isLostOrDamaged = loan.status === 'belum diganti' || loan.condition === 'rusak' || loan.condition === 'hilang';
+                        const statusLabel = loan.condition === 'hilang' ? 'Hilang' : loan.condition === 'rusak' ? 'Rusak' : 'Belum Kembali';
+                        const derivedCategory = loan.category || (loan.book_title && (
+                          loan.book_title.toLowerCase().includes('kelas') || 
+                          loan.book_title.toLowerCase().includes('pelajaran') ||
+                          loan.book_title.toLowerCase().includes('inggris') || 
+                          loan.book_title.toLowerCase().includes('indonesia')
+                        ) ? 'Paket' : 'Reguler');
+
+                        return (
+                          <tr key={loan.id} className="hover:bg-gray-50/30 transition-colors">
+                            <td className="py-4 pl-6 pr-4">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800 leading-snug">{loan.book_title}</p>
+                                <p className="text-xs text-amber-600 font-medium mt-0.5">
+                                  {loan.description || (isLostOrDamaged ? `Buku ${statusLabel.toLowerCase()} - harap selesaikan penggantian ke pustakawan` : 'Buku sedang dipinjam')}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="py-4 px-4 text-sm text-gray-600 font-medium">
+                              <span className={`px-2.5 py-0.5 rounded text-xs font-semibold capitalize ${
+                                isLostOrDamaged ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
+                              }`}>
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-sm text-gray-700 font-medium capitalize">{derivedCategory}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-              <button
-                onClick={handlePrint}
-                disabled={isDownloading}
-                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm self-start sm:self-auto active:scale-95 duration-150 disabled:opacity-75 disabled:cursor-not-allowed"
-              >
-                {isDownloading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Mengunduh PDF...</span>
-                  </>
-                ) : (
-                  <>
-                    <i className="ri-file-pdf-line text-lg" />
-                    <span>Unduh PDF</span>
-                  </>
-                )}
-              </button>
-            </div>
+            )}
 
             {/* Guide Info Box */}
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-amber-800 text-sm leading-relaxed no-print flex gap-3.5">
@@ -184,22 +287,39 @@ export default function SiswaClearance() {
               <div>
                 <p className="font-bold text-amber-900">Petunjuk Penyimpanan PDF (Pas 1 Halaman):</p>
                 <ul className="list-disc list-inside mt-1.5 space-y-1.5 text-[13px] font-medium">
-                  <li>Klik tombol <strong>Unduh PDF</strong> di atas untuk langsung mengunduh berkas surat bebas tanggungan secara otomatis.</li>
+                  {isEligible ? (
+                    <li>Klik tombol <strong>Unduh PDF</strong> di atas untuk langsung mengunduh berkas surat bebas tanggungan secara otomatis.</li>
+                  ) : (
+                    <li className="text-rose-700 font-bold">Kembalikan terlebih dahulu semua buku tanggungan Anda ke petugas perpustakaan agar tombol <strong>Unduh PDF</strong> aktif.</li>
+                  )}
                   <li>Sistem akan menyusun surat secara presisi pada satu halaman A4 yang bersih dan rapi.</li>
-                  <li>Jika unduhan otomatis gagal, peramban akan mengalihkan Anda ke jendela cetak sebagai cadangan (pastikan memilih <strong>"Simpan sebagai PDF"</strong>).</li>
                 </ul>
               </div>
             </div>
 
             {/* Preview Label */}
             <div className="flex items-center justify-between no-print pt-2">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Preview Surat Bebas Tanggungan</span>
-              <span className="text-xs text-gray-400">Tampilan resmi surat keterangan yang akan diunduh</span>
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                {isEligible ? 'Preview Surat Bebas Tanggungan' : 'Draf Preview Surat Bebas Tanggungan'}
+              </span>
+              <span className="text-xs text-gray-400">
+                {isEligible ? 'Tampilan resmi surat keterangan yang akan diunduh' : 'Unduh dinonaktifkan karena Anda masih memiliki tanggungan'}
+              </span>
             </div>
 
             {/* Preview & Print Container */}
-            <div className="print-letter-box bg-white p-6 md:p-12 border border-gray-200 shadow-md rounded-2xl max-w-[800px] mx-auto text-black">
-              <div id="pdf-content" className="bg-white p-2 text-black">
+            <div className="print-letter-box bg-white border border-gray-200 shadow-md rounded-2xl max-w-[850px] mx-auto text-black overflow-x-auto p-4 md:p-8">
+              <div id="pdf-content" style={{ width: '210mm', minHeight: '297mm', boxSizing: 'border-box' }} className="bg-white p-[20mm] text-black font-serif leading-relaxed mx-auto relative">
+                
+                {/* Draf Watermark Overlay (Only for Ineligible State) */}
+                {!isEligible && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-10 opacity-[0.08]">
+                    <span className="text-rose-900 border-8 border-rose-900 font-extrabold text-7xl uppercase tracking-widest px-8 py-4 rounded-3xl transform -rotate-12">
+                      DRAF / NON-AKTIF
+                    </span>
+                  </div>
+                )}
+
                 <div className="space-y-8">
                   {/* Kop Surat Madrasah */}
                   <div className="flex items-center border-b-4 border-double border-black pb-4 gap-4">
@@ -216,6 +336,8 @@ export default function SiswaClearance() {
                         Telepon: (0324) 321456 &middot; Email: perpustakaan@man2pamekasan.sch.id
                       </p>
                     </div>
+                    {/* Mirror spacer */}
+                    <div className="w-16 h-16 md:w-20 md:h-20 flex-shrink-0 invisible" />
                   </div>
 
                   {/* Judul Surat */}
@@ -239,11 +361,15 @@ export default function SiswaClearance() {
 
                       <span className="font-bold">Status Layanan</span>
                       <span>:</span>
-                      <span className="font-bold text-emerald-700">BEBAS TANGGUNGAN PERPUSTAKAAN</span>
+                      {isEligible ? (
+                        <span className="font-bold text-emerald-700">BEBAS TANGGUNGAN PERPUSTAKAAN</span>
+                      ) : (
+                        <span className="font-bold text-rose-700">BELUM BEBAS TANGGUNGAN PERPUSTAKAAN</span>
+                      )}
                     </div>
 
                     <p className="text-justify indent-8 leading-relaxed">
-                      Berdasarkan hasil verifikasi sistem inventarisasi data sirkulasi Perpustakaan MAN 2 Pamekasan terhitung tanggal <strong>{printDate}</strong>, siswa yang bersangkutan dinyatakan <strong>TIDAK MEMILIKI TANGGUNGAN</strong> baik berupa peminjaman buku paket pelajaran, buku reguler sastra referensi, maupun keterlambatan denda administrasi perpustakaan.
+                      Berdasarkan hasil verifikasi sistem inventarisasi data sirkulasi Perpustakaan MAN 2 Pamekasan terhitung tanggal <strong>{printDate}</strong>, siswa yang bersangkutan dinyatakan <strong>{isEligible ? 'TIDAK MEMILIKI TANGGUNGAN' : 'MASIH MEMILIKI TANGGUNGAN'}</strong> baik berupa peminjaman buku paket pelajaran, buku reguler sastra referensi, maupun keterlambatan denda administrasi perpustakaan.
                     </p>
 
                     <p className="text-justify indent-8 leading-relaxed">
@@ -268,73 +394,7 @@ export default function SiswaClearance() {
               </div>
             </div>
           </div>
-        ) : (
-          /* ERROR STATE: INELIGIBLE FOR CLEARANCE */
-          <div className="space-y-6 no-print">
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 flex gap-4">
-              <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
-                <i className="ri-error-warning-fill text-2xl" />
-              </div>
-              <div>
-                <h3 className="font-bold text-rose-800">Status: Belum Memenuhi Syarat</h3>
-                <p className="text-sm text-rose-600/90 mt-0.5 leading-relaxed">
-                  Surat bebas tanggungan belum dapat diterbitkan. Anda terdeteksi masih memiliki <strong>{activeLoans.length} tanggungan aktif</strong> (buku belum kembali, rusak, atau hilang). Silakan selesaikan tanggungan di bawah ini ke pustakawan.
-                </p>
-              </div>
-            </div>
-
-            {/* List of Active Loans */}
-            <div className="card-base overflow-hidden p-0">
-              <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-                <h3 className="font-bold text-gray-800 text-sm">Daftar Tanggungan Buku</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-xs text-gray-500 font-semibold border-b border-gray-100 bg-gray-50/30">
-                      <th className="py-3.5 pl-6 pr-4">Buku & Kondisi</th>
-                      <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4 pr-6">Jenis Buku</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {activeLoans.map((loan) => {
-                      const isLostOrDamaged = loan.status === 'belum diganti' || loan.condition === 'rusak' || loan.condition === 'hilang';
-                      const statusLabel = loan.condition === 'hilang' ? 'Hilang' : loan.condition === 'rusak' ? 'Rusak' : 'Belum Kembali';
-                      const derivedCategory = loan.category || (loan.book_title && (
-                        loan.book_title.toLowerCase().includes('kelas') || 
-                        loan.book_title.toLowerCase().includes('pelajaran') ||
-                        loan.book_title.toLowerCase().includes('inggris') || 
-                        loan.book_title.toLowerCase().includes('indonesia')
-                      ) ? 'Paket' : 'Reguler');
-
-                      return (
-                        <tr key={loan.id} className="hover:bg-gray-50/30 transition-colors">
-                          <td className="py-4 pl-6 pr-4">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-800 leading-snug">{loan.book_title}</p>
-                              <p className="text-xs text-amber-600 font-medium mt-0.5">
-                                {loan.description || (isLostOrDamaged ? `Buku ${statusLabel.toLowerCase()} - harap selesaikan penggantian ke pustakawan` : 'Buku sedang dipinjam')}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-sm text-gray-600 font-medium">
-                            <span className={`px-2.5 py-0.5 rounded text-xs font-semibold capitalize ${
-                              isLostOrDamaged ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
-                            }`}>
-                              {statusLabel}
-                            </span>
-                          </td>
-                          <td className="py-4 px-4 text-sm text-gray-700 font-medium capitalize">{derivedCategory}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+        ) }
       </div>
     </SiswaLayout>
   );

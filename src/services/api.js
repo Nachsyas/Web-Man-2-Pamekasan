@@ -101,6 +101,9 @@ export const api = {
     const queryStr = quantity ? `?quantity=${quantity}` : '';
     return apiRequest(`/books/${id}/labels${queryStr}`);
   },
+  
+  scanBook: (code) => 
+    apiRequest(`/books/scan?code=${encodeURIComponent(code)}`),
 
   // --- PEMINJAMAN (LOANS) ---
   getLoans: (category = '') => {

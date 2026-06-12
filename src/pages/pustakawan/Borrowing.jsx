@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
 import { api } from '../../services/api';
 
@@ -21,6 +22,7 @@ export default function Borrowing() {
   const [showModal, setShowModal] = useState(false);
   const [borrowType, setBorrowType] = useState('Reguler'); // 'Reguler' or 'Paket'
   const [toast, setToast] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
   
   const [listTab, setListTab] = useState('Reguler'); // 'Reguler' or 'Paket'
   
@@ -93,6 +95,113 @@ export default function Borrowing() {
     }
   }, [showModal, borrowType, searchBuku]);
 
+  const handleScanBarcode = async (barcode) => {
+    try {
+      let book = null;
+      let foundType = 'Reguler';
+
+      if (barcode.startsWith('MANDA-LIB:BOOK:')) {
+        const scanRes = await api.scanBook(barcode);
+        if (scanRes && scanRes.data) {
+          const rawBook = scanRes.data;
+          book = {
+            ...rawBook,
+            stock: rawBook.stok_sekarang !== undefined ? rawBook.stok_sekarang : (rawBook.stock || 0)
+          };
+          foundType = book.category === 'paket' ? 'Paket' : 'Reguler';
+        }
+      } else {
+        let res = await api.getBooksForLoanModal('reguler', barcode);
+        book = res.data && res.data.length > 0 ? res.data.find(b => b.isbn === barcode) || res.data[0] : null;
+        
+        if (!book) {
+          res = await api.getBooksForLoanModal('paket', barcode);
+          book = res.data && res.data.length > 0 ? res.data.find(b => b.isbn === barcode) || res.data[0] : null;
+          foundType = 'Paket';
+        }
+      }
+      
+      if (book) {
+        setSelectedBook(book);
+        setBorrowType(foundType);
+        setShowModal(true);
+        setToast(`Buku "${book.title}" berhasil dipindai dan terpilih!`);
+      } else {
+        setToast(`Buku dengan barcode/ISBN ${barcode} tidak ditemukan.`);
+      }
+    } catch (err) {
+      console.error(err);
+      setToast('Gagal memproses barcode buku.');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
+  };
+
+  const handleScanBarcodeInsideModal = async (barcode) => {
+    try {
+      let book = null;
+
+      if (barcode.startsWith('MANDA-LIB:BOOK:')) {
+        const scanRes = await api.scanBook(barcode);
+        if (scanRes && scanRes.data) {
+          const rawBook = scanRes.data;
+          const mappedBook = {
+            ...rawBook,
+            stock: rawBook.stok_sekarang !== undefined ? rawBook.stok_sekarang : (rawBook.stock || 0)
+          };
+          
+          const bookCategory = mappedBook.category === 'paket' ? 'Paket' : 'Reguler';
+          if (bookCategory !== borrowType) {
+            setToast(`Buku tersebut berjenis ${bookCategory}, tidak cocok untuk transaksi ${borrowType}.`);
+            return;
+          }
+          book = mappedBook;
+        }
+      } else {
+        const apiCategory = borrowType === 'Paket' ? 'paket' : 'reguler';
+        const res = await api.getBooksForLoanModal(apiCategory, barcode);
+        book = res.data && res.data.length > 0 ? res.data.find(b => b.isbn === barcode) || res.data[0] : null;
+      }
+      
+      if (book) {
+        setSelectedBook(book);
+        setToast(`Buku "${book.title}" berhasil terpilih!`);
+      } else {
+        setToast(`Buku dengan barcode ${barcode} tidak cocok atau tidak ditemukan.`);
+      }
+    } catch (err) {
+      setToast('Gagal memproses barcode.');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
+  };
+
+  useEffect(() => {
+    if (showScanner) {
+      const scanner = new Html5QrcodeScanner("borrow-reader", { 
+        qrbox: { width: 260, height: 120 },
+        fps: 8,
+      });
+      
+      scanner.render(
+        async (decodedText) => {
+          scanner.clear();
+          setShowScanner(false);
+          if (showModal) {
+            await handleScanBarcodeInsideModal(decodedText);
+          } else {
+            await handleScanBarcode(decodedText);
+          }
+        },
+        (error) => {} // Frame error ignored
+      );
+      
+      return () => {
+        scanner.clear().catch(e => console.error("Gagal membersihkan scanner", e));
+      };
+    }
+  }, [showScanner, showModal, borrowType]);
+
   // Handle auto-fill Nama Siswa
   const handleSelectMember = (member) => {
     setSelectedMember(member);
@@ -148,6 +257,9 @@ export default function Borrowing() {
             <p className="text-gray-500 mt-1">Daftar transaksi peminjaman aktif dan tambah peminjaman baru</p>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={() => setShowScanner(true)} className="bg-white border-2 border-emerald-100 text-emerald-600 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-emerald-50 hover:border-emerald-200 hover:shadow-sm transition-all duration-200 active:scale-95 shadow-sm">
+               <i className="ri-qr-scan-2-line text-lg" /> Pindai Barcode Buku
+            </button>
             <button onClick={() => openModal('Reguler')} className="btn-secondary">
                <i className="ri-add-line" /> Tambah Peminjaman Reguler
             </button>
@@ -288,15 +400,20 @@ export default function Borrowing() {
                         <div>
                             <div className="flex items-center justify-between mb-2">
                                 <label className="block text-sm font-bold text-gray-700">Pilih Buku {borrowType}</label>
-                                <div className="relative w-64">
-                                    <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                                    <input 
-                                        type="text" 
-                                        value={searchBuku} 
-                                        onChange={e => setSearchBuku(e.target.value)} 
-                                        placeholder="Cari buku..."
-                                        className="input-field w-full pl-9 py-1.5 text-sm" 
-                                    />
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setShowScanner(true)} className="bg-emerald-50 border border-emerald-200 text-emerald-600 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-semibold hover:bg-emerald-100 transition-colors shadow-sm active:scale-95">
+                                        <i className="ri-qr-scan-2-line text-sm" /> Kamera Scan
+                                    </button>
+                                    <div className="relative w-48 sm:w-64">
+                                        <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                                        <input 
+                                            type="text" 
+                                            value={searchBuku} 
+                                            onChange={e => setSearchBuku(e.target.value)} 
+                                            placeholder="Cari buku..."
+                                            className="input-field w-full pl-9 py-1.5 text-sm" 
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             
@@ -335,6 +452,24 @@ export default function Borrowing() {
                             <i className="ri-save-3-line" /> Simpan Peminjaman
                         </button>
                     </div>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL SCANNER BARCODE */}
+        {showScanner && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/80 backdrop-blur-sm">
+                <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in relative border border-emerald-100">
+                    <button onClick={() => setShowScanner(false)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors z-10">
+                        <i className="ri-close-line text-lg" />
+                    </button>
+                    <h3 className="font-bold text-xl text-gray-800 mb-4 text-center">Pindai Barcode Buku</h3>
+                    <div className="rounded-xl overflow-hidden border-4 border-emerald-100 mb-4 bg-black relative">
+                        <div id="borrow-reader" className="w-full" />
+                    </div>
+                    <p className="text-xs text-gray-500 text-center leading-relaxed">
+                        Arahkan kamera ke barcode label buku untuk menginput data secara otomatis.
+                    </p>
                 </div>
             </div>
         )}
