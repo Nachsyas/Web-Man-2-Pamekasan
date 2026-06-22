@@ -126,7 +126,7 @@ export default function Reports() {
   }, [reportData]);
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
+    <PustakawanLayout>
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           /* Hide all interactive components */

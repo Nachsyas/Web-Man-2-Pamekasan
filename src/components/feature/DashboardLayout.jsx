@@ -1,13 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../../services/api';
 
 export default function DashboardLayout({ children, userName }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [profileName, setProfileName] = useState(
+    localStorage.getItem('pustakawan_name') || userName || 'Pustakawan'
+  );
 
-  const currentUserName = localStorage.getItem('pustakawan_name') || userName || 'Ibu Siti Aminah, S.Pd.';
+  useEffect(() => {
+    api.getAccountMe()
+      .then(res => {
+        if (res && res.data) {
+          setProfileName(res.data.name);
+          localStorage.setItem('pustakawan_name', res.data.name);
+          localStorage.setItem('pustakawan_email', res.data.email);
+          if (res.data.nip) {
+            localStorage.setItem('pustakawan_nip', res.data.nip);
+          }
+        }
+      })
+      .catch(err => {
+        console.error('Gagal mengambil profil pustakawan di layout:', err);
+      });
+  }, [userName]);
+
+  const currentUserName = profileName;
 
   const getInitials = (name) => {
     if (!name) return 'SA';

@@ -408,7 +408,7 @@ export default function Books() {
   const activeCategoriesInForm = form.type === 'Buku Paket' ? combinedPaketCategories : combinedRegulerCategories;
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
+    <PustakawanLayout>
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6">
         
         {/* Header Section */}

@@ -131,9 +131,23 @@ export default function Members() {
       setTimeout(() => setToast(''), 3000);
     }
   };
+  const handleDeleteStudent = async (member) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus siswa ${member.name} (NISN: ${member.nisn})?`)) {
+      return;
+    }
+    try {
+      await api.deleteStudent(member.nisn);
+      setToast(`Siswa ${member.name} berhasil dihapus.`);
+      fetchMembers();
+    } catch (err) {
+      setToast(err.message || 'Gagal menghapus siswa');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
+  };
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
+    <PustakawanLayout>
       <div className="page-container space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -202,18 +216,19 @@ export default function Members() {
                       </div>
                     </div>
                   </th>
+                  <th className="py-4 whitespace-nowrap pr-6 pl-4 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="4" className="py-8 text-center text-gray-400 text-sm">
+                    <td colSpan="5" className="py-8 text-center text-gray-400 text-sm">
                       Memuat data...
                     </td>
                   </tr>
                 ) : members.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="py-8 text-center text-gray-400 text-sm">
+                    <td colSpan="5" className="py-8 text-center text-gray-400 text-sm">
                       Tidak ada data siswa ditemukan
                     </td>
                   </tr>
@@ -239,6 +254,15 @@ export default function Members() {
                             <span className="text-emerald-600" title="Buku Reguler">{member.total_reguler}</span>
                           </div>
                         </div>
+                      </td>
+                      <td className="py-3 whitespace-nowrap pr-6 pl-4 text-right">
+                        <button
+                          onClick={() => handleDeleteStudent(member)}
+                          className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-xl transition-all active:scale-95 duration-150 inline-flex items-center justify-center"
+                          title="Hapus Siswa"
+                        >
+                          <i className="ri-delete-bin-line text-lg" />
+                        </button>
                       </td>
                     </tr>
                   ))

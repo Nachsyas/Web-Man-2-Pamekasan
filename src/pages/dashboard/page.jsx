@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <PustakawanLayout userName={librarianName} userNisn="Pustakawan">
+      <PustakawanLayout>
         <div className="p-8 flex items-center justify-center min-h-[50vh]">
           <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         </div>
@@ -64,7 +64,7 @@ export default function Dashboard() {
   }
 
   return (
-    <PustakawanLayout userName={librarianName} userNisn="Pustakawan">
+    <PustakawanLayout>
       <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

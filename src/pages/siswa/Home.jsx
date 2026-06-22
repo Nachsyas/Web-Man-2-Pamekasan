@@ -14,6 +14,7 @@ export default function SiswaHome() {
   const [loans, setLoans] = useState([]);
   const [summary, setSummary] = useState({});
   const [clearance, setClearance] = useState({ is_eligible: true });
+  const [student, setStudent] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const nisn = localStorage.getItem('siswa_nisn') || '';
   const nama = localStorage.getItem('siswa_nama') || 'Siswa';
@@ -24,6 +25,9 @@ export default function SiswaHome() {
     try {
       const res = await api.getStudentDashboard();
       setSummary(res.summary || {});
+      if (res.student) {
+        setStudent(res.student);
+      }
       if (res.clearance) {
         setClearance({
           is_eligible: res.clearance.is_available || false,
@@ -139,10 +143,10 @@ export default function SiswaHome() {
             <div>
               <p className="text-sm text-primary-600 font-medium mb-1">Selamat Datang</p>
               <h1 className="text-2xl lg:text-3xl font-bold text-dark-800">
-                {nama}
+                {student?.name || nama}
               </h1>
               <p className="text-dark-500 text-sm mt-1">
-                Siswa &middot; NISN: {nisn}
+                Siswa &middot; NISN: {nisn} {student?.class && ` &middot; Kelas: ${student.class}`}
               </p>
             </div>
              <div className="flex items-center gap-3">

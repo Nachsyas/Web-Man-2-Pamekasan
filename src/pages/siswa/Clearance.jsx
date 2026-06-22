@@ -252,7 +252,7 @@ export default function SiswaClearance() {
                           loan.book_title.toLowerCase().includes('pelajaran') ||
                           loan.book_title.toLowerCase().includes('inggris') || 
                           loan.book_title.toLowerCase().includes('indonesia')
-                        ) ? 'Paket' : 'Reguler');
+                        ) ? 'paket' : 'reguler');
 
                         return (
                           <tr key={loan.id} className="hover:bg-gray-50/30 transition-colors">

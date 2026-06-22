@@ -12,6 +12,12 @@ export default function Returns() {
   const [toast, setToast] = useState('');
   
   const [listTab, setListTab] = useState('Reguler'); // 'Reguler' or 'Paket'
+  const [summary, setSummary] = useState({
+    returned_today: 0,
+    overdue: 0,
+    total_fine: 0,
+    waiting_return: 0
+  });
   
   // States for Return Modal
   const [returnCondition, setReturnCondition] = useState('Baik');
@@ -46,6 +52,20 @@ export default function Returns() {
         };
       });
       setTransactions(mapped);
+      
+      if (res && res.summary) {
+        setSummary(res.summary);
+      } else {
+        const overdueCount = mapped.filter(t => t.status === 'Overdue').length;
+        const totalFine = mapped.reduce((sum, t) => sum + t.fine, 0);
+        const waitingReturn = mapped.filter(t => t.status === 'Borrowed' || t.status === 'Overdue' || t.status === 'belum diganti' || t.status === 'Belum Diganti').length;
+        setSummary({
+          returned_today: 0,
+          overdue: overdueCount,
+          total_fine: totalFine,
+          waiting_return: waitingReturn
+        });
+      }
     } catch (err) {
       console.error('Gagal memuat data peminjaman:', err);
     }
@@ -58,16 +78,6 @@ export default function Returns() {
   const activeTransactions = useMemo(() => {
     return transactions.filter(t => (t.status === 'Borrowed' || t.status === 'Overdue' || t.status === 'belum diganti' || t.status === 'Belum Diganti') && t.type === listTab);
   }, [transactions, listTab]);
-
-  const stats = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    return {
-      today: transactions.filter(t => t.returnDate === todayStr).length,
-      overdue: transactions.filter(t => t.status === 'Overdue').length,
-      totalFine: transactions.reduce((sum, t) => sum + t.fine, 0),
-      pendingReturn: transactions.filter(t => t.status === 'Borrowed' || t.status === 'Overdue').length,
-    };
-  }, [transactions]);
 
   const searchTransaction = () => {
     const cleanSearchCode = searchCode.trim().toUpperCase();
@@ -125,7 +135,7 @@ export default function Returns() {
   };
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
+    <PustakawanLayout>
       <div className="page-container space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -140,10 +150,10 @@ export default function Returns() {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Kembali Hari Ini', value: stats.today, icon: 'ri-check-double-line', color: 'text-green-600 bg-green-50' },
-            { label: 'Terlambat', value: stats.overdue, icon: 'ri-alarm-warning-line', color: 'text-red-600 bg-red-50' },
-            { label: 'Total Denda', value: `Rp ${stats.totalFine.toLocaleString()}`, icon: 'ri-money-cny-circle-line', color: 'text-yellow-600 bg-yellow-50' },
-            { label: 'Menunggu Kembali', value: stats.pendingReturn, icon: 'ri-book-open-line', color: 'text-blue-600 bg-blue-50' },
+            { label: 'Kembali Hari Ini', value: summary.returned_today, icon: 'ri-check-double-line', color: 'text-green-600 bg-green-50' },
+            { label: 'Terlambat', value: summary.overdue, icon: 'ri-alarm-warning-line', color: 'text-red-600 bg-red-50' },
+            { label: 'Total Denda', value: `Rp ${(summary.total_fine || 0).toLocaleString('id-ID')}`, icon: 'ri-money-cny-circle-line', color: 'text-yellow-600 bg-yellow-50' },
+            { label: 'Menunggu Kembali', value: summary.waiting_return, icon: 'ri-book-open-line', color: 'text-blue-600 bg-blue-50' },
           ].map((s, i) => (
             <div key={i} className="card-base flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${s.color}`}>

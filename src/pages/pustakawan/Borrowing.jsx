@@ -247,7 +247,7 @@ export default function Borrowing() {
   };
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd.">
+    <PustakawanLayout>
       <div className="page-container space-y-6">
         
         {/* Header Section */}
