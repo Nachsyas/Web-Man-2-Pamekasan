@@ -8,7 +8,6 @@ import Borrowing from "../pages/pustakawan/Borrowing";
 import Members from "../pages/pustakawan/Members";
 import Reports from "../pages/pustakawan/Reports";
 import Returns from "../pages/pustakawan/Returns";
-import Settings from "../pages/pustakawan/Settings";
 import Account from "../pages/pustakawan/Account";
 import SiswaCatalog from "../pages/siswa/Catalog";
 import SiswaClearance from "../pages/siswa/Clearance";
@@ -34,7 +33,6 @@ const routes = [
   { path: "/pustakawan/pengembalian", element: <Returns /> },
   { path: "/pustakawan/anggota", element: <Members /> },
   { path: "/pustakawan/laporan", element: <Reports /> },
-  { path: "/pustakawan/pengaturan", element: <Settings /> },
   { path: "/pustakawan/akun", element: <Account /> },
 
   // Legacy redirects

@@ -1,20 +1,68 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import SiswaLayout from '../../components/feature/SiswaLayout';
-import { availableBooksForStudents, studentCategories } from '../../mocks/student';
+import { api } from '../../services/api';
+
+const regulerCategories = [
+  'Semua', 'Filsafat', 'Pendidikan', 'Sains & Matematika', 'Teknologi & Komputer', 
+  'Seni & Desain', 'Bahasa & Sastra', 'Fiksi / Novel', 'Agama & Spiritual', 
+  'Sejarah & Budaya', 'Sosial & Politik', 'Biografi / Otobiografi', 
+  'Referensi / Ensiklopedia', 'Karya Umum'
+];
 
 export default function SiswaCatalog() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Semua');
+  const [categories, setCategories] = useState(['Semua']);
   const [bookType, setBookType] = useState('Reguler'); // 'Reguler' | 'Paket'
+  const [books, setBooks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredBooks = availableBooksForStudents.filter((book) => {
-    const matchesSearch =
-      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.author.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = activeCategory === 'Semua' || book.category === activeCategory;
-    const matchesType = bookType === 'Paket' ? book.category === 'Pendidikan' : book.category !== 'Pendidikan';
-    return matchesSearch && matchesCategory && matchesType;
-  });
+  const fetchBooks = async () => {
+    setIsLoading(true);
+    try {
+      const apiCategory = bookType === 'Paket' ? 'paket' : 'reguler';
+      const subjectParam = activeCategory === 'Semua' ? '' : activeCategory;
+      const res = await api.getStudentCatalog(apiCategory, searchQuery, subjectParam);
+      
+      if (res && res.filters) {
+        setCategories(res.filters.map(f => f.label));
+      }
+      
+      const dataList = res.data || [];
+      
+      const mapped = dataList.map(b => {
+        const stockVal = b.stock !== undefined ? b.stock : 0;
+        const totalStockVal = b.stok_awal !== undefined ? b.stok_awal : 0;
+        
+        return {
+          id: b.id,
+          title: b.title,
+          isbn: b.isbn || '-',
+          author: b.author,
+          publisher: b.publisher || '-',
+          year: b.publication_year || '-',
+          classification_number: b.classification_number || '-',
+          rack: b.rack_location || '-',
+          stock: stockVal,
+          totalStock: totalStockVal,
+          category: b.subject || 'Umum',
+          type: b.category === 'paket' ? 'Buku Paket' : 'Buku Reguler',
+          description: `Buku ${b.subject || 'Umum'} terbitan ${b.publisher || '-'} tahun ${b.publication_year || '-'}.`
+        };
+      });
+      setBooks(mapped);
+    } catch (err) {
+      console.error('Gagal memuat katalog:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBooks();
+  }, [searchQuery, bookType, activeCategory]);
+
+  const filteredBooks = books;
 
   return (
     <SiswaLayout>
@@ -55,9 +103,9 @@ export default function SiswaCatalog() {
               className="w-full border border-gray-200 rounded-xl pl-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
             />
           </div>
-          {bookType === 'Reguler' && (
+          {categories.length > 1 && (
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 lg:pb-0">
-              {studentCategories.filter(c => c !== 'Pendidikan').slice(0, 6).map((cat) => (
+              {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}

@@ -41,18 +41,6 @@ export default function Header({ userName, onMenuClick, onSearch }) {
             <i className="ri-menu-line text-xl text-gray-600" />
           </button>
 
-          <form onSubmit={handleSearch} className="hidden md:flex items-center flex-1 max-w-md">
-            <div className="relative w-full">
-              <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari buku, siswa, atau transaksi..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-transparent focus:bg-white focus:border-primary-200 focus:ring-2 focus:ring-primary-100 text-sm placeholder-gray-400 transition-all outline-none"
-              />
-            </div>
-          </form>
         </div>
 
         {/* Right: notifications + profile */}

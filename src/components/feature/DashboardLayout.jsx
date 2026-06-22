@@ -1,14 +1,52 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../../services/api';
 
 export default function DashboardLayout({ children, userName }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [profileName, setProfileName] = useState(
+    localStorage.getItem('pustakawan_name') || userName || 'Pustakawan'
+  );
+
+  useEffect(() => {
+    api.getAccountMe()
+      .then(res => {
+        if (res && res.data) {
+          setProfileName(res.data.name);
+          localStorage.setItem('pustakawan_name', res.data.name);
+          localStorage.setItem('pustakawan_email', res.data.email);
+          if (res.data.nip) {
+            localStorage.setItem('pustakawan_nip', res.data.nip);
+          }
+        }
+      })
+      .catch(err => {
+        console.error('Gagal mengambil profil pustakawan di layout:', err);
+      });
+  }, [userName]);
+
+  const currentUserName = profileName;
+
+  const getInitials = (name) => {
+    if (!name) return 'SA';
+    const cleanName = name.replace(/^(Ibu|Bapak|Pak|Bu|S\.Pd\.|S\.Kom\.)\s+/i, '').trim();
+    const words = cleanName.split(/\s+/);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return words[0] ? words[0][0].toUpperCase() : 'SA';
+  };
+
+  const userInitials = getInitials(currentUserName);
 
   const handleLogout = () => {
+    localStorage.removeItem('access_token');
     localStorage.removeItem('pustakawan_email');
+    localStorage.removeItem('pustakawan_name');
+    localStorage.removeItem('pustakawan_nip');
     navigate('/');
   };
 
@@ -19,7 +57,6 @@ export default function DashboardLayout({ children, userName }) {
     { path: '/pustakawan/pengembalian', icon: 'ri-arrow-go-back-line', label: 'Pengembalian' },
     { path: '/pustakawan/anggota', icon: 'ri-user-line', label: 'Siswa' },
     { path: '/pustakawan/laporan', icon: 'ri-file-chart-line', label: 'Laporan' },
-    { path: '/pustakawan/pengaturan', icon: 'ri-settings-3-line', label: 'Pengaturan' },
   ];
 
   return (
@@ -86,15 +123,6 @@ export default function DashboardLayout({ children, userName }) {
              <i className="ri-menu-line text-xl" />
            </button>
 
-           {/* Pencarian Global */}
-           <div className="relative w-96 group hidden lg:block ml-4 md:ml-0">
-              <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-emerald-500 transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Cari buku, siswa, atau transaksi..." 
-                className="w-full bg-gray-50 border border-gray-200 text-gray-800 rounded-full pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 transition-all hover:border-emerald-300" 
-              />
-           </div>
 
            {/* Aksi Kanan (Ikon Lonceng Dihapus) */}
            <div className="flex items-center ml-auto">
@@ -105,11 +133,11 @@ export default function DashboardLayout({ children, userName }) {
                   onClick={() => setShowDropdown(!showDropdown)}
                 >
                    <div className="text-right hidden sm:block">
-                      <p className="text-sm font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">{userName}</p>
+                      <p className="text-sm font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">{currentUserName}</p>
                       <p className="text-xs text-gray-500">Pustakawan</p>
                    </div>
                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold border border-emerald-200 shadow-sm">
-                      SA
+                      {userInitials}
                    </div>
                    <i className="ri-arrow-down-s-line text-gray-400 group-hover:text-emerald-500 transition-colors" />
                 </div>

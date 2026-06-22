@@ -10,6 +10,12 @@ const siswaNavItems = [
 export default function SiswaHeader({ studentName, nisn }) {
   const location = useLocation();
 
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('siswa_nisn');
+    localStorage.removeItem('siswa_nama');
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
       {/* Desktop header */}
@@ -62,6 +68,7 @@ export default function SiswaHeader({ studentName, nisn }) {
           </div>
           <Link
             to="/"
+            onClick={handleLogout}
             className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
             title="Keluar"
           >
@@ -87,6 +94,7 @@ export default function SiswaHeader({ studentName, nisn }) {
             <span className="text-xs text-gray-500">{studentName}</span>
             <Link
               to="/"
+              onClick={handleLogout}
               className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
             >
               <i className="ri-logout-box-r-line" />

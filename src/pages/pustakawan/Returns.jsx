@@ -1,39 +1,97 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
-import { allBorrowingTransactions } from '../../mocks/system';
 import { booksMock } from '../../mocks/books';
+import { api } from '../../services/api';
 
 export default function Returns() {
   const [searchCode, setSearchCode] = useState('');
   const [foundTrx, setFoundTrx] = useState(null);
-  const [transactions, setTransactions] = useState(allBorrowingTransactions);
+  const [transactions, setTransactions] = useState([]);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [toast, setToast] = useState('');
   
   const [listTab, setListTab] = useState('Reguler'); // 'Reguler' or 'Paket'
+  const [summary, setSummary] = useState({
+    returned_today: 0,
+    overdue: 0,
+    total_fine: 0,
+    waiting_return: 0
+  });
   
   // States for Return Modal
   const [returnCondition, setReturnCondition] = useState('Baik');
   const [replacementType, setReplacementType] = useState('Buku');
   const [replacementNominal, setReplacementNominal] = useState('');
 
+  const fetchLoans = async () => {
+    try {
+      const res = await api.getReturns();
+      const rawData = Array.isArray(res) ? res : (res.data || []);
+      const mapped = rawData.map(l => {
+        const dueDate = new Date(l.dueDate || l.due_date);
+        dueDate.setHours(23, 59, 59, 999);
+        const today = new Date();
+        const daysLate = Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
+        const computedFineFallback = daysLate > 0 ? daysLate * 5000 : 0;
+        const fineVal = l.fine !== undefined && l.fine !== null ? l.fine : computedFineFallback;
+
+        return {
+          id: l.id,
+          code: l.code || l.transaction_code || l.transactionCode || `TRX-${l.id}`,
+          memberName: l.memberName || l.borrower_name || (l.students && l.students.name) || 'Siswa',
+          nisn: l.nisn,
+          books: l.books || [l.book_title || (l.books_relation && l.books_relation.title) || 'Buku'],
+          borrowDate: l.borrowDate || l.borrow_date,
+          dueDate: l.dueDate || l.due_date,
+          status: (l.status === 'overdue' || l.status === 'terlambat') ? 'Overdue' : (l.status === 'dipinjam' || l.status === 'borrowed') ? 'Borrowed' : l.status,
+          type: l.type || (l.category === 'paket' ? 'Paket' : 'Reguler'),
+          fine: fineVal,
+          author: l.author || '',
+          isbn: l.isbn || '',
+        };
+      });
+      setTransactions(mapped);
+      
+      if (res && res.summary) {
+        setSummary(res.summary);
+      } else {
+        const overdueCount = mapped.filter(t => t.status === 'Overdue').length;
+        const totalFine = mapped.reduce((sum, t) => sum + t.fine, 0);
+        const waitingReturn = mapped.filter(t => t.status === 'Borrowed' || t.status === 'Overdue' || t.status === 'belum diganti' || t.status === 'Belum Diganti').length;
+        setSummary({
+          returned_today: 0,
+          overdue: overdueCount,
+          total_fine: totalFine,
+          waiting_return: waitingReturn
+        });
+      }
+    } catch (err) {
+      console.error('Gagal memuat data peminjaman:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLoans();
+  }, []);
+
   const activeTransactions = useMemo(() => {
-    return transactions.filter(t => (t.status === 'Borrowed' || t.status === 'Overdue') && t.type === listTab);
+    return transactions.filter(t => (t.status === 'Borrowed' || t.status === 'Overdue' || t.status === 'belum diganti' || t.status === 'Belum Diganti') && t.type === listTab);
   }, [transactions, listTab]);
 
-  const stats = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return {
-      today: transactions.filter(t => t.returnDate === today).length,
-      overdue: transactions.filter(t => t.status === 'Overdue').length,
-      totalFine: transactions.reduce((sum, t) => sum + t.fine, 0),
-      pendingReturn: transactions.filter(t => t.status === 'Borrowed' || t.status === 'Overdue').length,
-    };
-  }, [transactions]);
-
   const searchTransaction = () => {
-    const found = transactions.find(t => t.id.toLowerCase() === searchCode.toLowerCase() && (t.status === 'Borrowed' || t.status === 'Overdue'));
+    const cleanSearchCode = searchCode.trim().toUpperCase();
+    const found = transactions.find(t => {
+      const matchId = t.id.toString() === cleanSearchCode;
+      const matchCode = t.code && t.code.toUpperCase() === cleanSearchCode;
+      // Handle prefix TRX-
+      const matchSplittedCode = cleanSearchCode.startsWith('TRX-') && 
+        t.id.toString() === parseInt(cleanSearchCode.split('-')[2], 10).toString();
+      
+      return (matchId || matchCode || matchSplittedCode) && 
+             (t.status === 'Borrowed' || t.status === 'Overdue');
+    });
+    
     if (found) {
       setFoundTrx(found);
       setReturnCondition('Baik');
@@ -46,20 +104,38 @@ export default function Returns() {
     }
   };
 
-  const processReturn = () => {
+  const processReturn = async () => {
     if (!foundTrx) return;
-    setTransactions(prev => prev.map(t => {
-      if (t.id !== foundTrx.id) return t;
-      return { ...t, status: 'Returned', returnDate: new Date().toISOString().split('T')[0] };
-    }));
-    setShowReturnModal(false);
-    setSearchCode('');
-    setToast(`Pengembalian ${foundTrx.id} berhasil diproses.`);
-    setTimeout(() => setToast(''), 3000);
+    try {
+      await api.returnBook(foundTrx.id, returnCondition);
+      setToast(`Pengembalian transaksi #${foundTrx.id} berhasil diproses.`);
+      fetchLoans();
+      setShowReturnModal(false);
+      setSearchCode('');
+    } catch (err) {
+      setToast(err.message || 'Gagal memproses pengembalian.');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
+  };
+
+  const handleMarkReplaced = async (trx) => {
+    if (!window.confirm(`Apakah Anda yakin buku pengganti untuk transaksi #${trx.code || trx.id} dari ${trx.memberName} sudah diterima?`)) {
+      return;
+    }
+    try {
+      await api.replaceBook(trx.id);
+      setToast(`Transaksi #${trx.code || trx.id} berhasil ditandai sudah diganti.`);
+      fetchLoans();
+    } catch (err) {
+      setToast(err.message || 'Gagal menandai buku sudah diganti.');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
+    <PustakawanLayout>
       <div className="page-container space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -74,10 +150,10 @@ export default function Returns() {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Kembali Hari Ini', value: stats.today, icon: 'ri-check-double-line', color: 'text-green-600 bg-green-50' },
-            { label: 'Terlambat', value: stats.overdue, icon: 'ri-alarm-warning-line', color: 'text-red-600 bg-red-50' },
-            { label: 'Total Denda', value: `Rp ${stats.totalFine.toLocaleString()}`, icon: 'ri-money-cny-circle-line', color: 'text-yellow-600 bg-yellow-50' },
-            { label: 'Menunggu Kembali', value: stats.pendingReturn, icon: 'ri-book-open-line', color: 'text-blue-600 bg-blue-50' },
+            { label: 'Kembali Hari Ini', value: summary.returned_today, icon: 'ri-check-double-line', color: 'text-green-600 bg-green-50' },
+            { label: 'Terlambat', value: summary.overdue, icon: 'ri-alarm-warning-line', color: 'text-red-600 bg-red-50' },
+            { label: 'Total Denda', value: `Rp ${(summary.total_fine || 0).toLocaleString('id-ID')}`, icon: 'ri-money-cny-circle-line', color: 'text-yellow-600 bg-yellow-50' },
+            { label: 'Menunggu Kembali', value: summary.waiting_return, icon: 'ri-book-open-line', color: 'text-blue-600 bg-blue-50' },
           ].map((s, i) => (
             <div key={i} className="card-base flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${s.color}`}>
@@ -154,7 +230,7 @@ export default function Returns() {
                 {activeTransactions.flatMap(trx => 
                   trx.books.map((b, i) => (
                     <tr key={`${trx.id}-${i}`} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="py-3 whitespace-nowrap pl-6 pr-4 text-sm font-mono text-gray-600">{trx.id}</td>
+                      <td className="py-3 whitespace-nowrap pl-6 pr-4 text-sm font-mono text-gray-600">{trx.code || trx.id}</td>
                       <td className="py-3 whitespace-nowrap px-4">
                         <p className="text-sm font-medium text-gray-800">{trx.memberName}</p>
                       </td>
@@ -163,26 +239,45 @@ export default function Returns() {
                       </td>
                       <td className="py-3 whitespace-nowrap px-4 text-center text-sm text-gray-600">{trx.dueDate}</td>
                       <td className="py-3 whitespace-nowrap px-4 text-center whitespace-nowrap">
-                        <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${trx.status === 'Overdue' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                          {trx.status === 'Overdue' ? 'Terlewat Batas Waktu Peminjaman' : 'Dipinjam'}
-                        </span>
+                        {trx.status === 'Overdue' ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border bg-red-50 text-red-600 border-red-100">
+                            Terlewat Batas Waktu Peminjaman
+                          </span>
+                        ) : (trx.status === 'belum diganti' || trx.status === 'Belum Diganti') ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border bg-amber-50 text-amber-600 border-amber-100">
+                            Belum Diganti (Rusak/Hilang)
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border bg-green-50 text-green-600 border-green-100">
+                            Dipinjam
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 whitespace-nowrap px-4 text-center text-sm font-bold whitespace-nowrap">
-                        {trx.fine > 0 ? <span className="text-red-500">Kalkulasi Denda...</span> : <span className="text-gray-400">-</span>}
+                        {trx.fine > 0 ? <span className="text-red-500">Rp {trx.fine.toLocaleString('id-ID')}</span> : <span className="text-gray-400">-</span>}
                       </td>
                       <td className="py-3 whitespace-nowrap pr-6 pl-4 text-right">
-                        <button 
-                          onClick={() => { 
-                            setFoundTrx(trx); 
-                            setReturnCondition('Baik');
-                            setReplacementType('Buku');
-                            setReplacementNominal('');
-                            setShowReturnModal(true); 
-                          }} 
-                          className="btn-primary py-1.5 px-4 text-xs inline-flex"
-                        >
-                          Sudah Dikembalikan
-                        </button>
+                        {(trx.status === 'belum diganti' || trx.status === 'Belum Diganti') ? (
+                          <button 
+                            onClick={() => handleMarkReplaced(trx)}
+                            className="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-1.5 px-4 text-xs rounded-xl inline-flex shadow-sm transition-all active:scale-95 duration-150"
+                          >
+                            Tandai Sudah Diganti
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => { 
+                              setFoundTrx(trx); 
+                              setReturnCondition('Baik');
+                              setReplacementType('Buku');
+                              setReplacementNominal('');
+                              setShowReturnModal(true); 
+                            }} 
+                            className="btn-primary py-1.5 px-4 text-xs inline-flex"
+                          >
+                            Sudah Dikembalikan
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -216,11 +311,11 @@ export default function Returns() {
           const baseFine = daysLate * 5000;
           
           const firstBookTitle = foundTrx.books[0] || '';
-          const bookDetails = booksMock.find(b => b.title === firstBookTitle) || {
+          const bookDetails = {
             title: firstBookTitle,
-            author: '-',
-            isbn: '-',
-            category: 'Reguler'
+            author: foundTrx.author || '-',
+            isbn: foundTrx.isbn || '-',
+            category: foundTrx.type || 'Reguler'
           };
 
           // Format Date ID
@@ -305,26 +400,35 @@ export default function Returns() {
                       <div className="pt-2">
                         <div className="flex justify-between items-center mb-2">
                           <label className="text-sm font-bold text-gray-700">Kondisi</label>
-                          <span className="text-[10px] text-[#FF4B4B] font-medium">*Apabila rusak, siswa wajib mengganti</span>
+                          <span className="text-[10px] text-[#FF4B4B] font-medium">*Apabila rusak/hilang, siswa wajib mengganti</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1.5 rounded-xl">
+                        <div className="grid grid-cols-3 gap-2 bg-gray-100 p-1.5 rounded-xl">
                           <button 
+                            type="button"
                             onClick={() => setReturnCondition('Baik')}
-                            className={`py-2.5 rounded-lg text-sm font-bold transition-all ${returnCondition === 'Baik' ? 'bg-[#059669] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`py-2.5 rounded-lg text-xs font-bold transition-all ${returnCondition === 'Baik' ? 'bg-[#059669] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                           >
                             Baik
                           </button>
                           <button 
+                            type="button"
                             onClick={() => setReturnCondition('Rusak')}
-                            className={`py-2.5 rounded-lg text-sm font-bold transition-all ${returnCondition === 'Rusak' ? 'bg-[#E5E7EB] text-gray-500 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                            className={`py-2.5 rounded-lg text-xs font-bold transition-all ${returnCondition === 'Rusak' ? 'bg-[#D1FAE5] text-emerald-800 border border-emerald-300' : 'text-gray-500 hover:text-gray-700'}`}
                           >
                             Rusak*
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setReturnCondition('Hilang')}
+                            className={`py-2.5 rounded-lg text-xs font-bold transition-all ${returnCondition === 'Hilang' ? 'bg-[#FEE2E2] text-red-800 border border-red-300' : 'text-gray-500 hover:text-gray-700'}`}
+                          >
+                            Hilang*
                           </button>
                         </div>
                       </div>
 
-                      {/* Ganti dengan (if Rusak) */}
-                      {returnCondition === 'Rusak' && (
+                      {/* Ganti dengan (if Rusak atau Hilang) */}
+                      {(returnCondition === 'Rusak' || returnCondition === 'Hilang') && (
                         <div className="animate-fade-in space-y-4 pt-4 border-t border-gray-100">
                           <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">Metode Penggantian</label>
@@ -407,12 +511,16 @@ export default function Returns() {
                     <button 
                       onClick={processReturn}
                       className={`w-full py-3.5 rounded-full font-bold text-white transition-all shadow-md ${
-                        returnCondition === 'Rusak' 
+                        returnCondition !== 'Baik' 
                           ? 'bg-[#E12A2A] hover:bg-red-700' 
                           : 'bg-[#059669] hover:bg-emerald-600'
                       }`}
                     >
-                      {returnCondition === 'Rusak' ? 'Buku Rusak, Siswa Mengganti' : 'Kembalikan Buku'}
+                      {returnCondition === 'Rusak' 
+                        ? 'Buku Rusak, Siswa Mengganti' 
+                        : returnCondition === 'Hilang' 
+                          ? 'Buku Hilang, Siswa Mengganti' 
+                          : 'Kembalikan Buku'}
                     </button>
                   </div>
                 </div>

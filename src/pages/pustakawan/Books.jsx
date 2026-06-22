@@ -1,7 +1,8 @@
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import * as XLSX from 'xlsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PustakawanLayout from '../../components/feature/DashboardLayout';
-import { bookRacks, booksMock } from '../../mocks/books';
+import { bookRacks } from '../../mocks/books';
+import { api } from '../../services/api';
 
 const conditions = ['Available', 'Borrowed', 'Damaged', 'Lost'];
 const bookTypes = ['Buku Reguler', 'Buku Paket'];
@@ -35,7 +36,8 @@ function ConditionBadge({ condition }) {
 }
 
 export default function Books() {
-  const [books, setBooks] = useState(booksMock.map(b => ({ ...b, type: 'Buku Reguler' })));
+  const [books, setBooks] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -43,114 +45,370 @@ export default function Books() {
   
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
   
   // State Khusus Import Excel
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
   const fileInputRef = useRef(null);
 
   const [editingBook, setEditingBook] = useState(null);
   const [form, setForm] = useState({});
   const [toast, setToast] = useState('');
 
-  // Efek Kamera Scan Barcode
-  useEffect(() => {
-    if (showScanner) {
-      const scanner = new Html5QrcodeScanner("reader", { 
-        qrbox: { width: 260, height: 120 },
-        fps: 8,
-      });
-      
-      scanner.render(
-        (decodedText) => {
-          setForm({
-            title: 'Buku Hasil Scan Kamera', 
-            isbn: decodedText,
-            category: '',
-            type: 'Buku Reguler',
-            stock: '',
-            rack: '',
-          });
-          scanner.clear();
-          setShowScanner(false);
-          setShowFormModal(true);
-          setToast(`Barcode ${decodedText} berhasil dipindai!`);
-          setTimeout(() => setToast(''), 3000);
-        },
-        (error) => {} // Frame scanner error ignored
-      );
-      return () => { scanner.clear().catch(e => console.error("Gagal membersihkan scanner", e)); };
+  const [labelsData, setLabelsData] = useState(null);
+  const [loadingLabels, setLoadingLabels] = useState(false);
+  const [labelQuantity, setLabelQuantity] = useState(10);
+
+  const handleOpenLabelModal = async (book) => {
+    setEditingBook(book);
+    setShowLabelModal(true);
+    setLoadingLabels(true);
+    setLabelsData(null);
+    const initialQty = Math.min(10, book.stock || 10);
+    setLabelQuantity(initialQty);
+    try {
+      const res = await api.getBookLabels(book.id, book.stock || 100);
+      if (res) {
+        setLabelsData(res.data || res);
+      }
+    } catch (err) {
+      console.error('Gagal mengambil label buku:', err);
+    } finally {
+      setLoadingLabels(false);
     }
-  }, [showScanner]);
+  };
+
+  const fetchBooks = async () => {
+    setIsLoading(true);
+    try {
+      let apiCategory = '';
+      if (typeFilter === 'Buku Paket') apiCategory = 'paket';
+      if (typeFilter === 'Buku Reguler') apiCategory = 'reguler';
+
+      const data = await api.getBooks(search, apiCategory);
+      const mapped = data.map(b => {
+        const stockVal = b.stok_sekarang !== undefined ? b.stok_sekarang : (b.stock !== undefined ? b.stock : 0);
+        const totalStockVal = b.stok_awal !== undefined ? b.stok_awal : (b.stock !== undefined ? b.stock : 0);
+        const isPaket = b.category === 'paket' || 
+                        (b.subject && b.subject.toLowerCase().includes('pelajaran')) || 
+                        (b.title && b.title.toLowerCase().includes('kelas'));
+        
+        return {
+          id: b.id,
+          title: b.title,
+          isbn: b.isbn || '',
+          author: b.author,
+          publisher: b.publisher || '',
+          year: b.publication_year || b.year || '',
+          classification_number: b.classification_number || '',
+          rack: b.rack_location || b.rack || '',
+          stock: stockVal,
+          totalStock: totalStockVal,
+          type: isPaket ? 'Buku Paket' : 'Buku Reguler',
+          category: b.subject || '',
+          condition: stockVal > 0 ? 'Available' : 'Borrowed'
+        };
+      });
+      setBooks(mapped);
+    } catch (err) {
+      setToast(err.message || 'Gagal memuat data buku');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBooks();
+  }, [search, typeFilter]);
+
+  // Scanner removed as requested
 
   const filteredBooks = useMemo(() => {
     return books.filter(b => {
-      const matchSearch = !search || b.title.toLowerCase().includes(search.toLowerCase()) || b.isbn.includes(search);
       const matchCategory = !categoryFilter || b.category === categoryFilter;
-      const matchType = !typeFilter || b.type === typeFilter;
-      return matchSearch && matchCategory && matchType;
+      return matchCategory;
     });
-  }, [books, search, categoryFilter, typeFilter]);
+  }, [books, categoryFilter]);
 
-  const saveBook = () => {
+  const saveBook = async () => {
     if (!form.title || !form.isbn) {
       setToast('Judul dan ISBN wajib diisi!');
       setTimeout(() => setToast(''), 3000);
       return;
     }
-    if (editingBook) {
-      setBooks(books.map(b => b.id === editingBook.id ? { ...b, ...form } : b));
-      setToast('Buku berhasil diperbarui');
-    } else {
-      setBooks([{ 
-        ...form, 
-        id: `BK-${Date.now()}`, 
-        stock: parseInt(form.stock) || 0,
-        totalStock: parseInt(form.stock) || 0,
-        type: form.type || 'Buku Reguler',
-        condition: 'Available'
-      }, ...books]);
-      setToast('Buku baru berhasil ditambahkan');
+
+    const payload = {
+      classification_number: form.classification_number || '000',
+      author: form.author || 'Pustakawan',
+      title: form.title,
+      edition: form.edition || 'Cetakan 1',
+      publication_place: form.publication_place || 'Pamekasan',
+      publisher: form.publisher || 'MAN 2 Pamekasan',
+      publication_year: parseInt(form.year) || new Date().getFullYear(),
+      total_pages: parseInt(form.total_pages) || 100,
+      subject: form.category || 'Umum',
+      stock: parseInt(form.stock) || 0,
+      category: form.type === 'Buku Paket' ? 'paket' : 'reguler',
+      rack_location: form.rack || 'Rak Umum',
+      isbn: form.isbn,
+    };
+
+    try {
+      if (editingBook) {
+        await api.updateBook(editingBook.id, payload);
+        setToast('Buku berhasil diperbarui');
+      } else {
+        await api.createBook(payload);
+        setToast('Buku baru berhasil ditambahkan');
+      }
+
+      // Save suggestions to local state and localStorage
+      if (form.category) {
+        if (form.type === 'Buku Paket') {
+          if (!paketCategories.includes(form.category) && !customCategoriesPaket.includes(form.category)) {
+            const updated = [...customCategoriesPaket, form.category];
+            setCustomCategoriesPaket(updated);
+            localStorage.setItem('custom_categories_paket', JSON.stringify(updated));
+          }
+        } else {
+          if (!regulerCategories.includes(form.category) && !customCategoriesReguler.includes(form.category)) {
+            const updated = [...customCategoriesReguler, form.category];
+            setCustomCategoriesReguler(updated);
+            localStorage.setItem('custom_categories_reguler', JSON.stringify(updated));
+          }
+        }
+      }
+
+      if (form.rack) {
+        if (!bookRacks.includes(form.rack) && !customRacks.includes(form.rack)) {
+          const updated = [...customRacks, form.rack];
+          setCustomRacks(updated);
+          localStorage.setItem('custom_racks', JSON.stringify(updated));
+        }
+      }
+
+      fetchBooks();
+      setShowFormModal(false);
+    } catch (err) {
+      setToast(err.message || 'Gagal menyimpan data buku');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
     }
-    setShowFormModal(false);
-    setTimeout(() => setToast(''), 3000);
   };
 
-  const confirmDelete = () => {
-    setBooks(books.filter(b => b.id !== editingBook.id));
-    setShowDelete(false);
-    setToast('Buku berhasil dihapus');
-    setTimeout(() => setToast(''), 3000);
+  const confirmDelete = async () => {
+    try {
+      await api.deleteBook(editingBook.id);
+      setToast('Buku berhasil dihapus');
+      fetchBooks();
+      setShowDelete(false);
+    } catch (err) {
+      setToast(err.message || 'Gagal menghapus buku');
+    } finally {
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
-  // Logika Simulasi Import Excel
+  // Logika Import Excel
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setImportFile(e.target.files[0]);
     }
   };
 
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Judul Buku',
+      'ISBN',
+      'Penulis',
+      'Penerbit',
+      'Tahun Terbit',
+      'Jumlah Halaman',
+      'Stok',
+      'Nomor Klasifikasi',
+      'Lokasi Rak',
+      'Jenis Buku',
+      'Subjek/Kategori'
+    ];
+    
+    const data = [
+      {
+        'Judul Buku': 'Bedebah di Ujung Tanduk',
+        'ISBN': '9786020656860',
+        'Penulis': 'Tere Liye',
+        'Penerbit': 'Gramedia Pustaka Utama',
+        'Tahun Terbit': 2021,
+        'Jumlah Halaman': 382,
+        'Stok': 15,
+        'Nomor Klasifikasi': '813',
+        'Lokasi Rak': 'Rak A1',
+        'Jenis Buku': 'Reguler',
+        'Subjek/Kategori': 'Fiksi / Novel'
+      },
+      {
+        'Judul Buku': 'Bahasa Indonesia Kelas X',
+        'ISBN': '9786022443122',
+        'Penulis': 'Kementerian Pendidikan dan Kebudayaan',
+        'Penerbit': 'Kemendikbud',
+        'Tahun Terbit': 2021,
+        'Jumlah Halaman': 250,
+        'Stok': 40,
+        'Nomor Klasifikasi': '370',
+        'Lokasi Rak': 'Rak Paket X',
+        'Jenis Buku': 'Paket',
+        'Subjek/Kategori': 'Bahasa Indonesia'
+      }
+    ];
+    
+    const worksheet = XLSX.utils.json_to_sheet(data, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Pendataan Buku');
+    
+    XLSX.writeFile(workbook, 'template_pendataan_buku.xlsx');
+    setToast('Template Excel berhasil diunduh!');
+    setTimeout(() => setToast(''), 3000);
+  };
+
   const processImport = () => {
     if (!importFile) return;
     setIsImporting(true);
+    setImportProgress('Membaca file Excel...');
     
-    // Simulasi proses pembacaan file Excel (Nanti diintegrasikan dengan library 'xlsx' SheetJS)
-    setTimeout(() => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet);
+        
+        if (json.length === 0) {
+          throw new Error('File Excel kosong atau tidak memiliki data.');
+        }
+        
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (let i = 0; i < json.length; i++) {
+          const row = json[i];
+          setImportProgress(`Mengimpor ${i + 1} dari ${json.length} buku...`);
+          
+          const title = row['Judul Buku'];
+          const isbn = row['ISBN'] ? String(row['ISBN']) : '';
+          
+          if (!title || !isbn) {
+            failCount++;
+            continue;
+          }
+          
+          const rawType = row['Jenis Buku'] || 'Reguler';
+          const categoryVal = rawType.toLowerCase().includes('paket') ? 'paket' : 'reguler';
+          
+          const payload = {
+            classification_number: String(row['Nomor Klasifikasi'] || '000'),
+            author: row['Penulis'] || 'Pustakawan',
+            title: title,
+            edition: row['Edisi'] || 'Cetakan 1',
+            publication_place: row['Tempat Terbit'] || 'Pamekasan',
+            publisher: row['Penerbit'] || 'MAN 2 Pamekasan',
+            publication_year: parseInt(row['Tahun Terbit']) || new Date().getFullYear(),
+            total_pages: parseInt(row['Jumlah Halaman']) || 100,
+            subject: row['Subjek/Kategori'] || 'Umum',
+            stock: parseInt(row['Stok']) || 0,
+            category: categoryVal,
+            rack_location: row['Lokasi Rak'] || 'Rak Umum',
+            isbn: isbn,
+          };
+          
+          try {
+            await api.createBook(payload);
+            successCount++;
+          } catch (err) {
+            console.error(`Gagal mengimpor baris ${i + 1}:`, err);
+            failCount++;
+          }
+        }
+        
+        setToast(`Import selesai! Berhasil: ${successCount}, Gagal: ${failCount}`);
+        fetchBooks();
+        setShowImportModal(false);
+        setImportFile(null);
+      } catch (err) {
+        setToast(`Gagal mengimpor: ${err.message}`);
+      } finally {
+        setIsImporting(false);
+        setImportProgress('');
+        setTimeout(() => setToast(''), 4000);
+      }
+    };
+    
+    reader.onerror = () => {
+      setToast('Gagal membaca file Excel.');
       setIsImporting(false);
-      setShowImportModal(false);
-      setImportFile(null);
-      setToast(`Berhasil mengimpor data dari ${importFile.name}!`);
-      setTimeout(() => setToast(''), 4000);
-    }, 2000);
+      setImportProgress('');
+      setTimeout(() => setToast(''), 3000);
+    };
+    
+    reader.readAsArrayBuffer(importFile);
   };
 
-  const activeCategoriesInForm = form.type === 'Buku Paket' ? paketCategories : regulerCategories;
+  const [customCategoriesReguler, setCustomCategoriesReguler] = useState(() => {
+    try {
+      const saved = localStorage.getItem('custom_categories_reguler');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [customCategoriesPaket, setCustomCategoriesPaket] = useState(() => {
+    try {
+      const saved = localStorage.getItem('custom_categories_paket');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [customRacks, setCustomRacks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('custom_racks');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const combinedRegulerCategories = useMemo(() => {
+    const fromBooks = books
+      .filter(b => b.type === 'Buku Reguler')
+      .map(b => b.category)
+      .filter(Boolean);
+    return Array.from(new Set([...regulerCategories, ...fromBooks, ...customCategoriesReguler]));
+  }, [books, customCategoriesReguler]);
+
+  const combinedPaketCategories = useMemo(() => {
+    const fromBooks = books
+      .filter(b => b.type === 'Buku Paket')
+      .map(b => b.category)
+      .filter(Boolean);
+    return Array.from(new Set([...paketCategories, ...fromBooks, ...customCategoriesPaket]));
+  }, [books, customCategoriesPaket]);
+
+  const combinedRacks = useMemo(() => {
+    const fromBooks = books.map(b => b.rack).filter(Boolean);
+    return Array.from(new Set([...bookRacks, ...fromBooks, ...customRacks]));
+  }, [books, customRacks]);
+
+  const activeCategoriesInForm = form.type === 'Buku Paket' ? combinedPaketCategories : combinedRegulerCategories;
 
   return (
-    <PustakawanLayout userName="Ibu Siti Aminah, S.Pd." userNisn="Pustakawan">
+    <PustakawanLayout>
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6">
         
         {/* Header Section */}
@@ -164,9 +422,7 @@ export default function Books() {
                 <button onClick={() => setShowImportModal(true)} className="bg-white border-2 border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 active:scale-95 shadow-sm">
                     <i className="ri-file-excel-2-line text-lg text-green-600" /> Import Excel
                 </button>
-                <button onClick={() => setShowScanner(true)} className="bg-white border-2 border-emerald-100 text-emerald-600 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-emerald-50 hover:border-emerald-200 hover:shadow-sm transition-all duration-200 active:scale-95 shadow-sm">
-                    <i className="ri-qr-scan-2-line text-lg" /> Kamera Scan
-                </button>
+
                 <button onClick={() => { setEditingBook(null); setForm({ type: 'Buku Reguler', category: '', condition: 'Available' }); setShowFormModal(true); }} className="bg-emerald-500 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold hover:bg-emerald-600 hover:shadow-md transition-all duration-200 active:scale-95 shadow-sm border border-emerald-600">
                     <i className="ri-add-line text-lg" /> Tambah Buku
                 </button>
@@ -225,10 +481,10 @@ export default function Books() {
                                 <td className="py-3 whitespace-nowrap px-4"><ConditionBadge condition={book.condition} /></td>
                                 <td className="py-3 whitespace-nowrap pr-6 text-right">
                                     <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => { setEditingBook(book); setShowLabelModal(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-purple-600 hover:bg-purple-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Cetak Label">
+                                        <button onClick={() => handleOpenLabelModal(book)} className="w-9 h-9 rounded-xl text-gray-400 hover:text-purple-600 hover:bg-purple-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Cetak Label">
                                             <i className="ri-printer-line text-lg" />
                                         </button>
-                                        <button onClick={() => { setEditingBook(book); setForm(book); setShowFormModal(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Edit Data">
+                                        <button onClick={() => { setEditingBook(book); setForm({ ...book, stock: book.totalStock }); setShowFormModal(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Edit Data">
                                             <i className="ri-edit-line text-lg" />
                                         </button>
                                         <button onClick={() => { setEditingBook(book); setShowDelete(true); }} className="w-9 h-9 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 hover:shadow-sm flex items-center justify-center transition-all duration-200" title="Hapus Buku">
@@ -278,7 +534,7 @@ export default function Books() {
                             <div>
                                 <p className="text-sm font-semibold text-blue-900 mb-1">Butuh Format Excel yang benar?</p>
                                 <p className="text-xs text-blue-700/80 mb-3 leading-relaxed">Unduh template Excel kami agar sistem dapat membaca kolom Judul, ISBN, Kategori, dan Stok dengan sempurna tanpa error.</p>
-                                <button className="bg-white border border-blue-200 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
+                                <button onClick={handleDownloadTemplate} className="bg-white border border-blue-200 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
                                     <i className="ri-download-2-line" /> Unduh Template .XLSX
                                 </button>
                             </div>
@@ -326,7 +582,7 @@ export default function Books() {
                         <button onClick={() => { setShowImportModal(false); setImportFile(null); }} className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 transition-colors text-sm bg-white shadow-sm" disabled={isImporting}>Batal</button>
                         <button onClick={processImport} disabled={!importFile || isImporting} className={`px-8 py-2.5 rounded-xl text-white font-bold transition-all duration-200 text-sm shadow-sm flex items-center gap-2 ${!importFile ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-600 hover:shadow-md active:scale-95 border border-emerald-600'}`}>
                             {isImporting ? (
-                                <> <i className="ri-loader-4-line animate-spin" /> Memproses... </>
+                                <> <i className="ri-loader-4-line animate-spin" /> {importProgress || 'Memproses...'} </>
                             ) : (
                                 <> <i className="ri-upload-2-fill" /> Mulai Import </>
                             )}
@@ -385,10 +641,16 @@ export default function Books() {
                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                                  Kategori {form.type === 'Buku Paket' ? 'Mata Pelajaran' : 'Sastra & Referensi'}
                                </label>
-                               <select value={form.category || ''} onChange={e => setForm({...form, category: e.target.value})} className="w-full bg-gray-50 border border-gray-200 text-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm cursor-pointer">
-                                    <option value="">Pilih Kategori Kustom...</option>
-                                    {activeCategoriesInForm.map(c => <option key={c} value={c}>{c}</option>)}
-                               </select>
+                               <input
+                                 list="category-suggestions"
+                                 value={form.category || ''}
+                                 onChange={e => setForm({...form, category: e.target.value})}
+                                 className="w-full bg-gray-50 border border-gray-200 text-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm"
+                                 placeholder="Ketik atau pilih kategori..."
+                               />
+                               <datalist id="category-suggestions">
+                                 {activeCategoriesInForm.map(c => <option key={c} value={c} />)}
+                               </datalist>
                             </div>
 
                             <div>
@@ -402,10 +664,16 @@ export default function Books() {
                             <div className="md:col-span-2 p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100 grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
                                    <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Lokasi Tempat Rak</label>
-                                   <select value={form.rack || ''} onChange={e => setForm({...form, rack: e.target.value})} className="w-full bg-white border border-gray-200 text-gray-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm cursor-pointer shadow-sm">
-                                        <option value="">Pilih Posisi Rak...</option>
-                                        {bookRacks.map(r => <option key={r} value={r}>{r}</option>)}
-                                   </select>
+                                   <input
+                                     list="rack-suggestions"
+                                     value={form.rack || ''}
+                                     onChange={e => setForm({...form, rack: e.target.value})}
+                                     className="w-full bg-white border border-gray-200 text-gray-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 hover:border-emerald-300 transition-colors text-sm shadow-sm"
+                                     placeholder="Ketik atau pilih lokasi..."
+                                   />
+                                   <datalist id="rack-suggestions">
+                                     {combinedRacks.map(r => <option key={r} value={r} />)}
+                                   </datalist>
                                 </div>
                                 <div>
                                    <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Jumlah Unit Ekslempar</label>
@@ -422,48 +690,147 @@ export default function Books() {
             </div>
         )}
 
-        {/* MODAL 2: SCANNER CAMERA DIRECT */}
-        {showScanner && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/80 backdrop-blur-sm">
-                <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in relative border border-emerald-100">
-                    <button onClick={() => setShowScanner(false)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors z-10">
-                        <i className="ri-close-line text-lg" />
-                    </button>
-                    <h3 className="font-bold text-xl text-gray-800 mb-4 text-center">Pindai Barcode Kamera</h3>
-                    <div className="rounded-xl overflow-hidden border-4 border-emerald-100 mb-4 bg-black relative">
-                        <div id="reader" className="w-full" />
-                    </div>
-                    <p className="text-xs text-gray-500 text-center leading-relaxed">
-                        Arahkan jendela kamera tepat ke deretan kode <span className="font-bold text-emerald-600">ISBN</span> buku paket untuk pengisian baris kode otomatis.
-                    </p>
-                </div>
-            </div>
-        )}
+
 
         {/* MODAL 3: PREVIEW PRINT LABEL */}
         {showLabelModal && editingBook && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
-                <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl animate-fade-in">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-gray-800">Preview Label Identitas</h3>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm print-modal-overlay">
+                {/* CSS @media print inject to only print the official labels */}
+                <style dangerouslySetInnerHTML={{ __html: `
+                  @media print {
+                    /* Hide sidebar, topbar, modal headers, controls and buttons */
+                    aside, header, button, .no-print, .print-exclude, .print-modal-overlay::before {
+                      display: none !important;
+                    }
+                    
+                    /* Reset body and layout container styling for printing */
+                    body, html, main, #root, div {
+                      background: transparent !important;
+                      box-shadow: none !important;
+                      border: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                    }
+                  
+                    /* Make overlay static and clean layout for print */
+                    .print-modal-overlay {
+                      position: static !important;
+                      display: block !important;
+                      background: transparent !important;
+                      backdrop-filter: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      width: 100% !important;
+                    }
+                  
+                    /* Remove modal borders and styling */
+                    .print-modal-overlay > div {
+                      background: transparent !important;
+                      border: none !important;
+                      box-shadow: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      width: 100% !important;
+                      max-width: 100% !important;
+                    }
+                  
+                    /* Lay out stickers in a 3-column print grid */
+                    .print-label-container {
+                      max-height: none !important;
+                      overflow: visible !important;
+                      background: transparent !important;
+                      border: none !important;
+                      padding: 0 !important;
+                      margin: 0 !important;
+                      display: grid !important;
+                      grid-template-columns: repeat(3, 1fr) !important;
+                      gap: 15px !important;
+                    }
+                  
+                    /* Format print label items as clean stickers with border cut guide */
+                    .print-label-item {
+                      page-break-inside: avoid !important;
+                      break-inside: avoid !important;
+                      border: 1px dashed #444 !important;
+                      background: white !important;
+                      box-shadow: none !important;
+                      margin: 0 auto !important;
+                      width: 100% !important;
+                      box-sizing: border-box !important;
+                      padding: 10px !important;
+                    }
+                  }
+                `}} />
+
+                <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-fade-in">
+                    <div className="flex justify-between items-center mb-6 print-exclude">
+                        <div>
+                            <h3 className="font-bold text-gray-800 text-lg">Preview Label Identitas</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">Dihasilkan otomatis oleh sistem backend</p>
+                        </div>
                         <button onClick={() => setShowLabelModal(false)} className="text-gray-400 hover:text-gray-600"><i className="ri-close-line text-xl" /></button>
                     </div>
                     
-                    <div className="border border-gray-300 p-1 bg-white mx-auto w-[240px] rounded drop-shadow-sm">
-                        <div className="border border-gray-800 p-3 text-center">
-                            <h4 className="font-bold text-[10px] uppercase tracking-wider mb-1">Perpus MAN 2 Pamekasan</h4>
-                            <div className="w-full h-px bg-gray-800 mb-3" />
-                            <i className="ri-barcode-line text-5xl text-gray-800 block mb-1" />
-                            <p className="font-mono text-xs font-bold tracking-widest mb-3">{editingBook.isbn || '000-000-000'}</p>
-                            <p className="text-xs font-bold leading-tight line-clamp-2 uppercase">{editingBook.title}</p>
-                            <div className="mt-3 flex justify-between items-end border-t border-gray-300 pt-2 text-[10px] font-bold">
-                                <span>{editingBook.rack || 'RAK-00'}</span>
-                                <span className="bg-gray-800 text-white px-1.5 py-0.5 rounded-sm">{editingBook.type === 'Buku Paket' ? 'PKT' : 'RGL'}</span>
-                            </div>
-                        </div>
+                    <div className="mb-4 print-exclude">
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">Jumlah Stiker yang Dicetak</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max={editingBook.stock || 100}
+                        value={labelQuantity} 
+                        onChange={(e) => setLabelQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="input-field w-full text-sm py-1.5"
+                      />
                     </div>
                     
-                    <button onClick={() => { window.print(); setShowLabelModal(false); }} className="w-full mt-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
+                    {loadingLabels ? (
+                      <div className="h-[250px] flex flex-col items-center justify-center gap-2 text-gray-400 print-exclude">
+                        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-xs">Menghasilkan stiker label...</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-[350px] overflow-y-auto space-y-4 pr-2 bg-gray-50 p-4 rounded-xl border border-gray-100 print-label-container">
+                        {labelsData?.labels ? (
+                          labelsData.labels.slice(0, labelQuantity).map((lbl, idx) => (
+                            <div key={idx} className="border border-gray-300 p-1 bg-white mx-auto w-[240px] rounded drop-shadow-sm print-label-item">
+                                <div className="border border-gray-800 p-3 text-center">
+                                    <h4 className="font-bold text-[9px] uppercase tracking-wider mb-1">{lbl.institution_name}</h4>
+                                    <div className="w-full h-px bg-gray-800 mb-2" />
+                                    <p className="font-bold text-xs leading-tight font-serif mb-1">{lbl.call_number}</p>
+                                    <p className="text-[10px] font-bold leading-tight line-clamp-1 uppercase mb-2">{lbl.title}</p>
+                                    <i className="ri-barcode-line text-3xl text-gray-800 block mb-0.5" />
+                                    <p className="font-mono text-[9px] font-bold tracking-widest">{lbl.isbn || '000-000-000'}</p>
+                                    <div className="mt-2 flex justify-between items-end border-t border-gray-300 pt-1.5 text-[9px] font-bold">
+                                        <span>{lbl.rack_location || 'RAK-00'}</span>
+                                        <span className="bg-gray-800 text-white px-1.5 py-0.5 rounded-sm uppercase">{lbl.category === 'paket' ? 'PKT' : 'RGL'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                          ))
+                        ) : (
+                          Array.from({ length: labelQuantity }).map((_, idx) => (
+                            <div key={idx} className="border border-gray-300 p-1 bg-white mx-auto w-[240px] rounded drop-shadow-sm print-label-item">
+                                <div className="border border-gray-800 p-3 text-center">
+                                    <h4 className="font-bold text-[10px] uppercase tracking-wider mb-1">Perpus MAN 2 Pamekasan</h4>
+                                    <div className="w-full h-px bg-gray-800 mb-3" />
+                                    <p className="font-bold text-xs leading-tight font-serif mb-1">
+                                      {editingBook.classification_number || '000'} {editingBook.author ? editingBook.author.substring(0, 3).toUpperCase() : 'XXX'} {editingBook.title ? editingBook.title.substring(0, 1).toLowerCase() : 'x'} C.{idx + 1}
+                                    </p>
+                                    <p className="text-xs font-bold leading-tight line-clamp-2 uppercase">{editingBook.title}</p>
+                                    <i className="ri-barcode-line text-5xl text-gray-800 block mb-1" />
+                                    <p className="font-mono text-xs font-bold tracking-widest mb-3">{editingBook.isbn || '000-000-000'}</p>
+                                    <div className="mt-3 flex justify-between items-end border-t border-gray-300 pt-2 text-[10px] font-bold">
+                                        <span>{editingBook.rack || 'RAK-00'}</span>
+                                        <span className="bg-gray-800 text-white px-1.5 py-0.5 rounded-sm">{editingBook.type === 'Buku Paket' ? 'PKT' : 'RGL'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                    
+                    <button onClick={() => { window.print(); setShowLabelModal(false); }} className="w-full mt-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors print-exclude">
                         <i className="ri-printer-fill" /> Cetak Label Stiker
                     </button>
                 </div>
